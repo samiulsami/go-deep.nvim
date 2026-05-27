@@ -1,0 +1,6 @@
+bin/
+go-deep
+*.tar.gz
+*.zip
+checksums.txt
+logs/

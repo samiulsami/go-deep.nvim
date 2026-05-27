@@ -1,0 +1,328 @@
+*go_deep.txt*         Deep Go completion for unimported packages
+
+==============================================================================
+DESCRIPTION                                          *go_deep-description*
+
+go-deep.nvim provides native Neovim completion for exported Go symbols from
+unimported local, internal, vendored, and standard library packages. It runs a
+Go backend process that queries a persistent `gopls` subprocess plus an
+in-memory stdlib index, matches against the stdlib index and a warmed project
+symbol store, filters to eligible candidates, and calls Neovim's `complete()`
+directly. The Lua side is a thin client: prefix extraction, completion
+trigger, and auto-import insertion.
+
+==============================================================================
+REQUIREMENTS                                            *go_deep-requirements*
+
+- Neovim 0.12+
+- Go 1.24+ (to build the plugin-local backend)
+- `gopls` on `PATH`
+- Tree-sitter with the Go parser (for import insertion)
+
+==============================================================================
+BACKEND                                                   *go_deep-backend*
+
+The plugin needs a Go binary at `bin/go-deep` under the plugin root. It tries
+to auto-build it on first use. If that fails or you prefer not to auto-build:
+
+Download a prebuilt archive from the releases page:
+  https://github.com/samiulsami/go-deep.nvim/releases
+Pick the asset for your OS/arch and extract it into the plugin root. The
+archive already contains `bin/go-deep`.
+
+Or build manually: >
+    :lua require("go_deep").build()
+<
+The plugin does not use `go install`, `GOPATH`, or `PATH` for its backend.
+
+==============================================================================
+SETUP                                                       *go_deep-setup*
+vim.pack + native completion: >
+    vim.pack.add({
+        { src = "https://github.com/samiulsami/go-deep.nvim" },
+    })
+
+    vim.g.go_deep = {
+        notifications = true,
+        min_keyword_length = 3,
+        max_items = 30,
+        max_from_same_package = 4,
+        exclude_imported_packages = true,
+    }
+
+    vim.api.nvim_create_autocmd("LspAttach", {
+        callback = function(ev)
+            local client = vim.lsp.get_client_by_id(ev.data.client_id)
+            if client and client.name == "gopls" then
+                require("go_deep").attach_to_buffer(ev.buf)
+            end
+        end,
+    })
+
+    vim.opt.completeopt = { "menu", "menuone", "popup", "noselect", "fuzzy" }
+    vim.opt.complete = { "o", ".", "w", "b", "u", "t" }
+    vim.opt.omnifunc = "v:lua.vim.lsp.omnifunc"
+    vim.opt.autocomplete = true
+<
+
+vim.pack + blink.cmp: >
+    vim.pack.add({
+        { src = "https://github.com/saghen/blink.cmp" },
+        { src = "https://github.com/saghen/blink.lib" },
+        { src = "https://github.com/samiulsami/go-deep.nvim" },
+    })
+
+    require("blink.cmp").setup({
+        sources = {
+            default = { "lsp", "path", "buffer", "go_deep" },
+            providers = {
+                go_deep = {
+                    module = "go_deep.blink",
+                    async = true,
+                    opts = {
+                        min_keyword_length = 2,
+                        max_items = 5,
+                        max_from_same_package = 4,
+                        exclude_imported_packages = true,
+                    },
+                },
+            },
+        },
+    })
+<
+
+lazy.nvim + native completion: >
+    {
+        "samiulsami/go-deep.nvim",
+        opts = {
+            min_keyword_length = 3,
+            max_items = 30,
+            max_from_same_package = 4,
+            exclude_imported_packages = true,
+        },
+        config = function(_, opts)
+            vim.g.go_deep = opts
+            vim.api.nvim_create_autocmd("LspAttach", {
+                callback = function(ev)
+                    local client = vim.lsp.get_client_by_id(ev.data.client_id)
+                    if client and client.name == "gopls" then
+                        require("go_deep").attach_to_buffer(ev.buf)
+                    end
+                end,
+            })
+        end,
+    }
+<
+
+lazy.nvim + blink.cmp: >
+    {
+        "saghen/blink.cmp",
+        branch = "main",
+        dependencies = {
+            { "saghen/blink.lib" },
+            { "samiulsami/go-deep.nvim" },
+        },
+        opts = {
+            sources = {
+                default = { "lsp", "path", "buffer", "go_deep" },
+                providers = {
+                    go_deep = {
+                        module = "go_deep.blink",
+                        async = true,
+                        opts = {
+                            min_keyword_length = 2,
+                            max_items = 5,
+                            max_from_same_package = 4,
+                            exclude_imported_packages = true,
+                        },
+                    },
+                },
+            },
+        },
+    }
+<
+
+Native completion recommended settings: >
+    vim.opt.completeopt = { "menu", "menuone", "popup", "noselect", "fuzzy" }
+    vim.opt.complete = { "o", ".", "w", "b", "u", "t" }
+    vim.opt.omnifunc = "v:lua.vim.lsp.omnifunc"
+    vim.opt.autocomplete = true
+<
+
+Only the vetted Go symbol kinds are surfaced: types, enums, interfaces,
+functions, variables, constants, and structs.
+
+==============================================================================
+OPTIONS                                                *go_deep-options*
+
+Options are set via `vim.g.go_deep`: >
+
+    vim.g.go_deep = {
+        notifications = true,
+        min_keyword_length = 3,
+        cache = true,
+        index = true,
+        index_db_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
+        workspace_timeout = 15,
+        max_items = 30,
+        max_from_same_package = 4,
+        exclude_imported_packages = true,
+        exclude_vendored_packages = false,
+        exclude_internal_packages = true,
+        exclude_test_files = true,
+    }
+<
+
+The plugin is Go-only and requires an attached `gopls` client. It does not use
+filetype-based routing. The recommended setup is still to attach the plugin
+yourself from `LspAttach` for the clients you want.
+
+                                                   *go_deep-blink*
+With blink.cmp, use the first-party source module: >
+
+    require("blink.cmp").setup({
+        sources = {
+            default = { "lsp", "path", "buffer", "go_deep" },
+            providers = {
+                go_deep = {
+                    module = "go_deep.blink",
+                    async = true,
+                    opts = {
+                        min_keyword_length = 2,
+                        max_items = 5,
+                        max_from_same_package = 4,
+                        exclude_imported_packages = true,
+                    },
+                },
+            },
+        },
+    })
+<
+
+blink support targets the `blink.cmp` `main` branch. Older `blink.cmp`
+branches are untested.
+
+blink provider `opts` are merged over `vim.g.go_deep` for that request. These
+overrides affect only request-local settings:
+
+- `min_keyword_length`
+- `max_items`
+- `max_from_same_package`
+- `exclude_imported_packages`
+- `exclude_vendored_packages`
+- `exclude_internal_packages`
+- `exclude_test_files`
+
+Shared backend startup settings still come from `vim.g.go_deep` because one
+long-lived backend process is shared across requests.
+
+`workspace_timeout` is a backend startup configuration option; it is not a
+request-local blink override.
+
+Do not use native go-deep and blink go-deep in the same buffer. Choose one
+frontend per buffer.
+
+                                            *go_deep-option-min_keyword_length*
+    `min_keyword_length`                        (integer, default: 3)
+        Minimum length of the typed prefix before completions trigger.
+
+                                                 *go_deep-option-cache*
+    `cache`                                     (boolean, default: true)
+        Use the in-memory project symbol store for completion.
+
+                                                 *go_deep-option-index*
+    `index`                                     (boolean, default: true)
+        Build and use the persisted stdlib index.
+
+                                         *go_deep-option-index_db_path*
+    `index_db_path`                             (string)
+        Path to the gob-backed stdlib index file.
+        Default: `vim.fn.stdpath("data") .. "/go_deep/go_deep.gob"`.
+
+                                                 *go_deep-option-max_items*
+    `max_items`                                 (integer, default: 30)
+        Maximum number of completion items returned.
+
+                                       *go_deep-option-max_from_same_package*
+    `max_from_same_package`                        (integer, default: 4)
+        Maximum completion items from the same package per query.
+
+                                     *go_deep-option-exclude_imported_packages*
+    `exclude_imported_packages`                 (boolean, default: true)
+        Exclude packages already imported in the current file.
+
+                                    *go_deep-option-exclude_vendored_packages*
+    `exclude_vendored_packages`                 (boolean, default: false)
+        Exclude symbols from Go `vendor/` directories.
+
+                                    *go_deep-option-exclude_internal_packages*
+    `exclude_internal_packages`                 (boolean, default: true)
+        Exclude internal packages that the current file cannot import,
+        following Go's internal package rules.
+
+                                        *go_deep-option-exclude_test_files*
+    `exclude_test_files`                        (boolean, default: true)
+        Exclude symbols from `*_test.go` files.
+
+                                            *go_deep-option-notifications*
+    `notifications`                             (boolean, default: true)
+        Show startup/build failures and backend exits as Neovim notifications.
+
+==============================================================================
+FLOW                                                       *go_deep-flow*
+
+1. `attach_to_buffer()` prepends `Fv:lua.go_deep_completefunc` to |'complete'|
+   and installs a `CompleteDone` autocommand for import insertion.
+
+2. On `InsertCharPre`, Lua predicts the next prefix and sends one `symbols`
+   request. With native autocomplete disabled and the menu closed, the request
+   is `warm_only` and returns no items.
+
+3. `go_deep_completefunc()` returns `-2` for async completion. `findstart`
+   uses a 0-based start column; `vim.fn.complete()` later receives that column
+   plus 1.
+
+4. Lua sends imported paths with the request. The Go backend matches warmed
+   project symbols plus stdlib index results, filters/deduplicates them, builds
+   completion items, and sends them back to Lua for visible requests.
+
+5. Background warmup queries `gopls workspace/symbol` and stores normalized
+   project symbols in `ProjectSymbolCache`.
+
+6. On `CompleteDone`, the plugin inserts the missing import statement using
+   tree-sitter.
+
+============================================================================== 
+BACKEND BINARY                                      *go_deep-binary*
+
+The Go backend is started automatically by `attach_to_buffer()`. It
+communicates over stdin/stdout msgpack-rpc (via `jobstart({rpc=true})`).
+stdout is reserved for msgpack-rpc; routine logs are written to session log
+files instead.
+
+CLI: >
+    go-deep serve [flags]
+<
+
+Common flags: >
+    --cache
+    --index
+    --index-db-path string
+    --min-prefix-length int
+    --max-items int
+    --max-from-same-package int
+    --workspace-timeout int
+    --exclude-imported
+    --exclude-vendored
+    --exclude-internal
+    --exclude-test-files
+<
+
+The backend requires a working `gopls` installation on `PATH`. If gopls cannot
+start, the backend exits with a fatal error.
+
+Log files are written to `$CACHE/go_deep/logs/YYYYMMDD-HHMMSS-PID.log`
+(`$CACHE` is `os.UserCacheDir()`: `~/.cache` on Linux, `~/Library/Caches` on
+macOS).
+
+  vim:tw=78:ts=8:ft=help:norl:

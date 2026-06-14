@@ -7,8 +7,11 @@ import (
 	"github.com/samiulsami/go-deep.nvim/go/symbol"
 )
 
+// NOTE: this is mostly required for the native completion path
+
 // Fuzzy scoring algorithm adapted from junegunn/fzf.
 // See: https://github.com/junegunn/fzf/blob/master/src/algo/algo.go
+
 
 const (
 	ccNone  byte = 0

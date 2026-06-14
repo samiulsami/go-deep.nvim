@@ -3,19 +3,30 @@
 ==============================================================================
 DESCRIPTION                                          *go_deep-description*
 
-go-deep.nvim provides native Neovim completion for exported Go symbols from
-unimported local, internal, vendored, and standard library packages. It runs a
-Go backend process that queries a persistent `gopls` subprocess plus an
-in-memory stdlib index, matches against the stdlib index and a warmed project
-symbol store, filters to eligible candidates, and calls Neovim's `complete()`
-directly. The Lua side is a thin client: prefix extraction, completion
-trigger, and auto-import insertion.
+A Go `deep-completion` source for Neovim native `completeFunc` and blink.cmp,
+that works alongside the LSP source(s) and provides completion suggestions for
+the standard library, local, and vendored packages.
+
+Why?
+
+At the time of writing, the Go Language Server (`gopls@v0.22.0`) doesn't seem
+to support deep completions for unimported packages. For example, with deep
+completion enabled, typing `'cha'` could suggest `rand.NewChaCha8()` as a
+possible completion option - but that is not the case no matter how high the
+completion budget is set for `gopls`.
+
+How?
+
+Query `gopls's` `workspace/symbol` endpoint, keep project symbols in memory,
+build a persisted stdlib index, convert the resulting `SymbolInformation` into
+`completionItemKinds`, filter the resuls then feed them back into native
+completion / `blink.cmp`
 
 ==============================================================================
 REQUIREMENTS                                            *go_deep-requirements*
 
 - Neovim 0.12+
-- Go 1.24+ (to build the plugin-local backend)
+- Go 1.25+ (to build the plugin-local backend)
 - `gopls` on `PATH`
 - Tree-sitter with the Go parser (for import insertion)
 

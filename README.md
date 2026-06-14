@@ -1,16 +1,14 @@
 # go-deep.nvim
 
-A Go ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) / [blink.cmp](https://github.com/Saghen/blink.cmp), that works alongside [cmp-nvim-lsp](https://github.com/hrsh7th/cmp-nvim-lsp) / [blink.cmp](https://github.com/Saghen/blink.cmp)'s LSP source and provides completion suggestions for <b> "<i>UNIMPORTED</i> LOCAL, INTERNAL, AND VENDORED PACKAGES ONLY".</b>
+A Go ```deep-completion``` source for Neovim native `completeFunc` and [blink.cmp](https://github.com/Saghen/blink.cmp), that works alongside the LSP source(s) and provides completion suggestions for <b> "the standard library, local, and vendored packages".</b>
 
 #### Why?
 
-At the time of writing, the Go Language Server (```gopls@v0.21.0```) doesn't seem to support deep completions for unimported packages. For example, with deep completion enabled, typing ```'cha'``` could suggest ```'rand.NewChaCha8()'``` as a possible completion option - but that is not the case no matter how high the completion budget is set for ```gopls```.
-
+At the time of writing, the Go Language Server (```gopls@v0.22.0```) doesn't seem to support deep completions for unimported packages. For example, with deep completion enabled, typing ```'cha'``` could suggest ```'rand.NewChaCha8()'``` as a possible completion option - but that is not the case no matter how high the completion budget is set for ```gopls```.
 
 #### How?
 
-
-Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ```sqlite```, convert the resulting ```SymbolInformation``` into ```completionItemKinds```, filter the results to only include the ones that are unimported, then finally feed them back into ```nvim-cmp``` / ```blink.cmp```
+Query  ```gopls's``` ```workspace/symbol``` endpoint, keep project symbols in memory, build a persisted stdlib index, convert the resulting ```SymbolInformation``` into ```completionItemKinds```, filter the resuls then feed them back into native completion / ```blink.cmp```
 
 ---
 

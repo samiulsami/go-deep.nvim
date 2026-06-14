@@ -236,31 +236,10 @@ func (h *serveHandler) handleSymbols(e *rpc.Endpoint, req serveRequest, comp *co
 		Options:         effectiveOpts,
 	}
 
-	if !h.cfg.Cache {
-		if req.WarmOnly {
-			return
-		}
-		fetch := completionFetch{id: id, requestID: req.RequestID, e: e, req: req, cReq: cReq, comp: comp}
-		h.fetchPool.Submit(func() { h.handleCompletionFetch(h.ctx, fetch) })
-		return
-	}
-
-	result, err := comp.Complete(cReq)
-	if err != nil {
-		log.Printf("[%d] completer error: %v", id, err)
-		return
-	}
-
 	fetch := completionFetch{id: id, requestID: req.RequestID, e: e, req: req, cReq: cReq, comp: comp}
 
 	if req.WarmOnly {
 		h.fetchPool.Submit(func() { h.handleCompletionFetch(h.ctx, fetch) })
-		return
-	}
-
-	if len(result.Items) > 0 {
-		log.Printf("[%d] cached: %d items", id, len(result.Items))
-		h.sendSymbols(id, e, req.RequestID, result.Items)
 		return
 	}
 
@@ -270,37 +249,19 @@ func (h *serveHandler) handleSymbols(e *rpc.Endpoint, req serveRequest, comp *co
 func (h *serveHandler) handleCompletionFetch(ctx context.Context, job completionFetch) {
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Duration(h.cfg.WorkspaceTimeout)*time.Second)
 	defer cancel()
-	if !h.cfg.Cache {
-		result, err := job.comp.DirectComplete(fetchCtx, job.cReq)
-		if err != nil {
+	if job.req.WarmOnly {
+		if err := job.comp.WarmupCache(fetchCtx, job.cReq); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return
 			}
-			log.Printf("[%d] direct completion error: %v", job.id, err)
-			return
-		}
-		if len(result.Items) > 0 {
-			log.Printf("[%d] fetched: %d items", job.id, len(result.Items))
-			h.sendSymbols(job.id, job.e, job.requestID, result.Items)
+			log.Printf("[%d] workspace fetch error: %v", job.id, err)
 		}
 		return
 	}
 
-	if err := job.comp.WarmupCache(fetchCtx, job.cReq); err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return
-		}
-		log.Printf("[%d] workspace fetch error: %v", job.id, err)
-		return
-	}
-
-	if job.req.WarmOnly {
-		return
-	}
-
-	result, err := job.comp.Complete(job.cReq)
+	result, err := job.comp.FetchAndComplete(fetchCtx, job.cReq)
 	if err != nil {
-		log.Printf("[%d] complete after warmup failed: %v", job.id, err)
+		log.Printf("[%d] fetch and complete failed: %v", job.id, err)
 		return
 	}
 	if len(result.Items) > 0 {

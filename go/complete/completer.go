@@ -162,20 +162,7 @@ func (c *DefaultCompleter) Complete(req Request) (Result, error) {
 		return Result{}, nil
 	}
 
-	n := req.Options.MaxItems
-
-	var candidates []*symbol.Symbol
-	if c.stdlibCache != nil {
-		candidates = append(candidates, c.stdlibCache.Match(req.Prefix, n)...)
-	}
-	if c.projectSymbolCache != nil {
-		candidates = append(candidates, c.projectSymbolCache.Match(req.Prefix, n)...)
-	}
-	if len(candidates) == 0 {
-		return Result{}, nil
-	}
-
-	filtered := filterSymbols(newProcessContext(req, prov.IncludeSymbol), candidates)
+	filtered := c.completeCandidates(req, prov, nil)
 	if len(filtered) == 0 {
 		return Result{}, nil
 	}
@@ -186,7 +173,7 @@ func (c *DefaultCompleter) Complete(req Request) (Result, error) {
 	return Result{Items: items}, nil
 }
 
-func (c *DefaultCompleter) DirectComplete(ctx context.Context, req Request) (Result, error) {
+func (c *DefaultCompleter) FetchAndComplete(ctx context.Context, req Request) (Result, error) {
 	prov, err := c.validate(req)
 	if err != nil {
 		return Result{}, err
@@ -195,12 +182,21 @@ func (c *DefaultCompleter) DirectComplete(ctx context.Context, req Request) (Res
 		return Result{}, nil
 	}
 
-	syms, err := c.querySymbols(ctx, req)
+	syms, err := prov.FetchSymbols(ctx, req)
 	if err != nil {
+		result, cacheErr := c.Complete(req)
+		if cacheErr != nil {
+			return Result{}, cacheErr
+		}
+		if len(result.Items) > 0 {
+			return result, nil
+		}
 		return Result{}, err
 	}
-
-	filtered := processSymbolBatch(newProcessContext(req, prov.IncludeSymbol), syms, nil)
+	if c.projectSymbolCache != nil {
+		c.projectSymbolCache.StoreBatch(syms)
+	}
+	filtered := c.completeCandidates(req, prov, syms)
 	if len(filtered) == 0 {
 		return Result{}, nil
 	}
@@ -223,17 +219,20 @@ func (c *DefaultCompleter) WarmupCache(ctx context.Context, req Request) error {
 	return nil
 }
 
-func (c *DefaultCompleter) querySymbols(ctx context.Context, req Request) ([]*symbol.Symbol, error) {
-	var indexed []*symbol.Symbol
+func (c *DefaultCompleter) completeCandidates(req Request, prov *Provider, live []*symbol.Symbol) []*symbol.Symbol {
+	n := req.Options.MaxItems
+	var candidates []*symbol.Symbol
+	if len(live) > 0 {
+		candidates = append(candidates, live...)
+	}
+	if c.projectSymbolCache != nil {
+		candidates = append(candidates, c.projectSymbolCache.Match(req.Prefix, n)...)
+	}
 	if c.stdlibCache != nil {
-		indexed = c.stdlibCache.Match(req.Prefix, req.Options.MaxItems)
+		candidates = append(candidates, c.stdlibCache.Match(req.Prefix, n)...)
 	}
-	workspaceSyms, err := c.provider.FetchSymbols(ctx, req)
-	if err != nil {
-		if len(indexed) > 0 {
-			return indexed, nil
-		}
-		return nil, err
+	if len(candidates) == 0 {
+		return nil
 	}
-	return append(indexed, workspaceSyms...), nil
+	return filterSymbols(newProcessContext(req, prov.IncludeSymbol), candidates)
 }

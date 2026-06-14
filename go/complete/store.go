@@ -1,7 +1,7 @@
 package complete
 
 import (
-	"math/rand/v2"
+	"container/list"
 	"sync"
 
 	"github.com/samiulsami/go-deep.nvim/go/score"
@@ -10,10 +10,15 @@ import (
 
 const defaultProjectSymbolCacheCapacity = 10_000
 
+type cacheEntry struct {
+	key    string
+	symbol *symbol.Symbol
+}
+
 type ProjectSymbolCache struct {
-	mu       sync.RWMutex
-	symbols  []*symbol.Symbol
-	items    map[string]int
+	mu       sync.Mutex
+	items    map[string]*list.Element
+	recent   *list.List
 	capacity int
 }
 
@@ -22,8 +27,8 @@ func NewProjectSymbolCache(capacity int) *ProjectSymbolCache {
 		capacity = defaultProjectSymbolCacheCapacity
 	}
 	return &ProjectSymbolCache{
-		symbols:  make([]*symbol.Symbol, 0, capacity),
-		items:    make(map[string]int, capacity),
+		items:    make(map[string]*list.Element, capacity),
+		recent:   list.New(),
 		capacity: capacity,
 	}
 }
@@ -43,16 +48,17 @@ func (c *ProjectSymbolCache) storeLocked(s *symbol.Symbol) {
 	if dedupeKey == "" {
 		return
 	}
-	if idx, ok := c.items[dedupeKey]; ok {
-		c.symbols[idx] = s
+	if elem, ok := c.items[dedupeKey]; ok {
+		entry := elem.Value.(*cacheEntry)
+		entry.symbol = s
+		c.recent.MoveToFront(elem)
 		return
 	}
-	if len(c.symbols) >= c.capacity {
+	if len(c.items) >= c.capacity {
 		c.evictLocked()
 	}
-	idx := len(c.symbols)
-	c.symbols = append(c.symbols, s)
-	c.items[dedupeKey] = idx
+	elem := c.recent.PushFront(&cacheEntry{key: dedupeKey, symbol: s})
+	c.items[dedupeKey] = elem
 }
 
 func (c *ProjectSymbolCache) StoreBatch(syms []*symbol.Symbol) {
@@ -60,43 +66,51 @@ func (c *ProjectSymbolCache) StoreBatch(syms []*symbol.Symbol) {
 		return
 	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	for _, s := range syms {
 		c.storeLocked(s)
 	}
-	c.mu.Unlock()
 }
 
 func (c *ProjectSymbolCache) evictLocked() {
-	if len(c.symbols) == 0 {
+	if len(c.items) == 0 {
 		return
 	}
-	i := rand.IntN(len(c.symbols))
-	victim := c.symbols[i]
-	delete(c.items, c.symbolDedupKey(victim))
-	last := len(c.symbols) - 1
-	if i != last {
-		c.symbols[i] = c.symbols[last]
-		c.items[c.symbolDedupKey(c.symbols[i])] = i
+	victim := c.recent.Back()
+	if victim == nil {
+		return
 	}
-	c.symbols = c.symbols[:last]
+	entry := victim.Value.(*cacheEntry)
+	delete(c.items, entry.key)
+	c.recent.Remove(victim)
 }
 
 func (c *ProjectSymbolCache) Match(query string, n int) []*symbol.Symbol {
 	if n <= 0 || query == "" {
 		return nil
 	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return score.Rank(score.RankOpts{
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	syms := make([]*symbol.Symbol, 0, len(c.items))
+	for elem := c.recent.Front(); elem != nil; elem = elem.Next() {
+		syms = append(syms, elem.Value.(*cacheEntry).symbol)
+	}
+	matched := score.Rank(score.RankOpts{
 		Query:   query,
 		Limit:   n,
-		Symbols: c.symbols,
+		Symbols: syms,
 	})
+	for _, sym := range matched {
+		if elem, ok := c.items[c.symbolDedupKey(sym)]; ok {
+			c.recent.MoveToFront(elem)
+		}
+	}
+	return matched
 }
 
 func (c *ProjectSymbolCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.symbols = c.symbols[:0]
+	c.recent.Init()
 	clear(c.items)
 }

@@ -100,48 +100,57 @@ func TestFilterSymbolsHonorsExcludeTestFilesPerRequest(t *testing.T) {
 
 func TestProjectSymbolCacheEvictSingleClearsIndex(t *testing.T) {
 	cache := NewProjectSymbolCache(1)
-	sym := &symbol.Symbol{Name: "Println", ImportPath: "fmt"}
+	first := &symbol.Symbol{Name: "Println", ImportPath: "fmt", Haystack: "fmt\x00Println"}
+	second := &symbol.Symbol{Name: "Printf", ImportPath: "fmt", Haystack: "fmt\x00Printf"}
 
-	cache.symbols = []*symbol.Symbol{sym}
-	cache.items[cache.symbolDedupKey(sym)] = 0
+	cache.StoreBatch([]*symbol.Symbol{first})
+	cache.StoreBatch([]*symbol.Symbol{second})
 
-	cache.evictLocked()
-
-	if len(cache.symbols) != 0 {
-		t.Fatalf("expected empty symbols after eviction, got %d", len(cache.symbols))
+	if len(cache.items) != 1 {
+		t.Fatalf("expected one cache entry after eviction, got %d", len(cache.items))
 	}
-	if len(cache.items) != 0 {
-		t.Fatalf("expected empty items after eviction, got %d", len(cache.items))
+	if got := cache.Match("Println", 1); len(got) != 0 {
+		t.Fatalf("expected evicted symbol to be gone, got %d results", len(got))
 	}
-
-	cache.StoreBatch([]*symbol.Symbol{sym})
-	if len(cache.symbols) != 1 {
-		t.Fatalf("expected symbol to store cleanly after eviction, got %d", len(cache.symbols))
-	}
-	if got := cache.items[cache.symbolDedupKey(sym)]; got != 0 {
-		t.Fatalf("expected stored symbol index 0, got %d", got)
-	}
-	if cache.symbols[0] != sym {
-		t.Fatalf("expected stored symbol pointer to match input")
+	if got := cache.Match("Printf", 1); len(got) != 1 || got[0] != second {
+		t.Fatalf("expected remaining symbol to be Printf")
 	}
 }
 
 func TestProjectSymbolCacheStoreBatchUpsertsExistingSymbol(t *testing.T) {
 	cache := NewProjectSymbolCache(2)
-	original := &symbol.Symbol{Name: "Println", ImportPath: "fmt", PackageName: "fmt"}
-	updated := &symbol.Symbol{Name: "Println", ImportPath: "fmt", PackageName: "fmt_alias"}
+	original := &symbol.Symbol{Name: "Println", ImportPath: "fmt", PackageName: "fmt", Haystack: "fmt\x00Println"}
+	updated := &symbol.Symbol{Name: "Println", ImportPath: "fmt", PackageName: "fmt_alias", Haystack: "fmt\x00Println"}
 
 	cache.StoreBatch([]*symbol.Symbol{original})
 	cache.StoreBatch([]*symbol.Symbol{updated})
 
-	if len(cache.symbols) != 1 {
-		t.Fatalf("expected one deduplicated symbol, got %d", len(cache.symbols))
+	if len(cache.items) != 1 {
+		t.Fatalf("expected one deduplicated symbol, got %d", len(cache.items))
 	}
-	if cache.symbols[0] != updated {
+	got := cache.Match("Println", 1)
+	if len(got) != 1 || got[0] != updated {
 		t.Fatalf("expected cached symbol to be updated in place")
 	}
-	if got := cache.items[cache.symbolDedupKey(updated)]; got != 0 {
-		t.Fatalf("expected updated symbol index 0, got %d", got)
+}
+
+func TestProjectSymbolCacheMatchRefreshesRecency(t *testing.T) {
+	cache := NewProjectSymbolCache(2)
+	first := &symbol.Symbol{Name: "Println", ImportPath: "fmt", Haystack: "fmt\x00Println"}
+	second := &symbol.Symbol{Name: "Sprintf", ImportPath: "fmt", Haystack: "fmt\x00Sprintf"}
+	third := &symbol.Symbol{Name: "Errorf", ImportPath: "fmt", Haystack: "fmt\x00Errorf"}
+
+	cache.StoreBatch([]*symbol.Symbol{first, second})
+	if got := cache.Match("Print", 1); len(got) != 1 || got[0] != first {
+		t.Fatalf("expected Println cache hit")
+	}
+	cache.StoreBatch([]*symbol.Symbol{third})
+
+	if got := cache.Match("Print", 1); len(got) != 1 || got[0] != first {
+		t.Fatalf("expected Println to stay resident after recency refresh")
+	}
+	if got := cache.Match("Sprintf", 1); len(got) != 0 {
+		t.Fatalf("expected least-recently-used symbol to be evicted")
 	}
 }
 

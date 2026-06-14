@@ -8,8 +8,6 @@ import (
 	"github.com/samiulsami/go-deep.nvim/go/symbol"
 )
 
-const completionCandidateOverfetchFactor = 4
-
 type ProcessOptions struct {
 	MaxItems           int  `msgpack:"max_items"`
 	MaxFromSamePackage int  `msgpack:"max_from_same_package"`
@@ -40,11 +38,11 @@ type CompletionItem struct {
 }
 
 type SymbolMatcher interface {
-	Match(query string, n int) ([]*symbol.Symbol, error)
+	Match(query string, n int) []*symbol.Symbol
 }
 
 type SymbolStore interface {
-	Match(query string, n int) ([]*symbol.Symbol, error)
+	Match(query string, n int) []*symbol.Symbol
 	StoreBatch(syms []*symbol.Symbol)
 }
 
@@ -164,22 +162,14 @@ func (c *DefaultCompleter) Complete(req Request) (Result, error) {
 		return Result{}, nil
 	}
 
-	n := req.Options.MaxItems * completionCandidateOverfetchFactor
+	n := req.Options.MaxItems
 
 	var candidates []*symbol.Symbol
 	if c.stdlibCache != nil {
-		matched, err := c.stdlibCache.Match(req.Prefix, n)
-		if err != nil {
-			return Result{}, err
-		}
-		candidates = append(candidates, matched...)
+		candidates = append(candidates, c.stdlibCache.Match(req.Prefix, n)...)
 	}
 	if c.projectSymbolCache != nil {
-		matched, err := c.projectSymbolCache.Match(req.Prefix, n)
-		if err != nil {
-			return Result{}, err
-		}
-		candidates = append(candidates, matched...)
+		candidates = append(candidates, c.projectSymbolCache.Match(req.Prefix, n)...)
 	}
 	if len(candidates) == 0 {
 		return Result{}, nil
@@ -236,11 +226,7 @@ func (c *DefaultCompleter) WarmupCache(ctx context.Context, req Request) error {
 func (c *DefaultCompleter) querySymbols(ctx context.Context, req Request) ([]*symbol.Symbol, error) {
 	var indexed []*symbol.Symbol
 	if c.stdlibCache != nil {
-		var err error
-		indexed, err = c.stdlibCache.Match(req.Prefix, req.Options.MaxItems*completionCandidateOverfetchFactor)
-		if err != nil {
-			return nil, err
-		}
+		indexed = c.stdlibCache.Match(req.Prefix, req.Options.MaxItems)
 	}
 	workspaceSyms, err := c.provider.FetchSymbols(ctx, req)
 	if err != nil {

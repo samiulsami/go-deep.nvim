@@ -6,25 +6,18 @@ import (
 	"github.com/samiulsami/go-deep.nvim/go/symbol"
 )
 
-func TestRankOrdersByBetterComparator(t *testing.T) {
+func TestRankOrdersByScore(t *testing.T) {
 	syms := []*symbol.Symbol{
 		{Name: "Println", ImportPath: "fmt", Haystack: "fmt\x00Println"},
 		{Name: "Printf", ImportPath: "fmt", Haystack: "fmt\x00Printf"},
 		{Name: "Sprint", ImportPath: "fmt", Haystack: "fmt\x00Sprint"},
 	}
 
-	got, err := Rank(RankOpts{
+	got := Rank(RankOpts{
 		Query:   "pri",
 		Limit:   3,
 		Symbols: syms,
-		Better: func(a, b ScoredItem) bool {
-			return a.Score > b.Score
-		},
-		TrimFinal: true,
 	})
-	if err != nil {
-		t.Fatalf("Rank returned error: %v", err)
-	}
 	if len(got) == 0 {
 		t.Fatal("expected ranked results")
 	}
@@ -44,24 +37,11 @@ func TestRankUsesDeterministicTieBreakers(t *testing.T) {
 		{Name: "Printb", ImportPath: "a/fmt", Haystack: "fmt\x00Printb"},
 	}
 
-	got, err := Rank(RankOpts{
+	got := Rank(RankOpts{
 		Query:   "print",
 		Limit:   3,
 		Symbols: syms,
-		Better: func(a, b ScoredItem) bool {
-			if a.Score != b.Score {
-				return a.Score > b.Score
-			}
-			if a.Symbol.ImportPath != b.Symbol.ImportPath {
-				return a.Symbol.ImportPath < b.Symbol.ImportPath
-			}
-			return a.Symbol.Name < b.Symbol.Name
-		},
-		TrimFinal: false,
 	})
-	if err != nil {
-		t.Fatalf("Rank returned error: %v", err)
-	}
 	if len(got) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(got))
 	}

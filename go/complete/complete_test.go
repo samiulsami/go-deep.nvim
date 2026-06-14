@@ -12,11 +12,11 @@ type stubSymbolStore struct {
 	results []*symbol.Symbol
 }
 
-func (s *stubSymbolStore) Match(query string, n int) ([]*symbol.Symbol, error) {
+func (s *stubSymbolStore) Match(query string, n int) []*symbol.Symbol {
 	if n > len(s.results) {
 		n = len(s.results)
 	}
-	return s.results[:n], nil
+	return s.results[:n]
 }
 
 func (s *stubSymbolStore) StoreBatch(syms []*symbol.Symbol) {}

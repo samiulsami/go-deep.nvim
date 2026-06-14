@@ -149,36 +149,24 @@ func NewIndex(ctx context.Context, cfg IndexConfig) (*Index, error) {
 	return idx, nil
 }
 
-func (idx *Index) Match(query string, limit int) ([]*symbol.Symbol, error) {
+func (idx *Index) Match(query string, limit int) []*symbol.Symbol {
 	if !idx.ready.Load() || limit <= 0 {
-		return nil, nil
+		return nil
 	}
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.search(query, limit)
 }
 
-func (idx *Index) search(query string, limit int) ([]*symbol.Symbol, error) {
+func (idx *Index) search(query string, limit int) []*symbol.Symbol {
 	if len(idx.symbols) == 0 || query == "" {
-		return nil, nil
+		return nil
 	}
 	return score.Rank(score.RankOpts{
-		Query:     query,
-		Limit:     limit,
-		Symbols:   idx.symbols,
-		Better:    betterRankedSymbol,
-		TrimFinal: false,
+		Query:   query,
+		Limit:   limit,
+		Symbols: idx.symbols,
 	})
-}
-
-func betterRankedSymbol(a, b score.ScoredItem) bool {
-	if a.Score != b.Score {
-		return a.Score > b.Score
-	}
-	if a.Symbol.ImportPath != b.Symbol.ImportPath {
-		return a.Symbol.ImportPath < b.Symbol.ImportPath
-	}
-	return a.Symbol.Name < b.Symbol.Name
 }
 
 func (idx *Index) loadFromCache(cache CacheFile) {

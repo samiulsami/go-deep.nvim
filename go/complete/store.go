@@ -81,23 +81,17 @@ func (c *ProjectSymbolCache) evictLocked() {
 	c.symbols = c.symbols[:last]
 }
 
-func (c *ProjectSymbolCache) Match(query string, n int) ([]*symbol.Symbol, error) {
+func (c *ProjectSymbolCache) Match(query string, n int) []*symbol.Symbol {
 	if n <= 0 || query == "" {
-		return nil, nil
+		return nil
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return score.Rank(score.RankOpts{
-		Query:     query,
-		Limit:     n,
-		Symbols:   c.symbols,
-		Better:    betterByScore,
-		TrimFinal: true,
+		Query:   query,
+		Limit:   n,
+		Symbols: c.symbols,
 	})
-}
-
-func betterByScore(a, b score.ScoredItem) bool {
-	return a.Score > b.Score
 }
 
 func (c *ProjectSymbolCache) Clear() {

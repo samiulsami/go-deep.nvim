@@ -2,7 +2,6 @@ package score
 
 import (
 	"container/heap"
-	"fmt"
 	"sort"
 
 	"github.com/samiulsami/go-deep.nvim/go/symbol"
@@ -136,8 +135,7 @@ type ScoredItem struct {
 }
 
 type rankHeap struct {
-	data   []ScoredItem
-	better func(ScoredItem, ScoredItem) bool
+	data []ScoredItem
 }
 
 func (h *rankHeap) Len() int      { return len(h.data) }
@@ -152,29 +150,33 @@ func (h *rankHeap) Pop() any {
 }
 
 func (h *rankHeap) Less(i, j int) bool {
-	return h.better(h.data[j], h.data[i])
+	return betterByScoreImportPathName(h.data[j], h.data[i])
 }
 
 type RankOpts struct {
-	Query     string
-	Limit     int
-	Symbols   []*symbol.Symbol
-	Better    func(a, b ScoredItem) bool
-	TrimFinal bool
+	Query   string
+	Limit   int
+	Symbols []*symbol.Symbol
 }
 
-func Rank(opts RankOpts) ([]*symbol.Symbol, error) {
+func betterByScoreImportPathName(a, b ScoredItem) bool {
+	if a.Score != b.Score {
+		return a.Score > b.Score
+	}
+	if a.Symbol.ImportPath != b.Symbol.ImportPath {
+		return a.Symbol.ImportPath < b.Symbol.ImportPath
+	}
+	return a.Symbol.Name < b.Symbol.Name
+}
+
+func Rank(opts RankOpts) []*symbol.Symbol {
 	n := opts.Limit
 	if n <= 0 || len(opts.Symbols) == 0 || opts.Query == "" {
-		return nil, nil
-	}
-	if opts.Better == nil {
-		return nil, fmt.Errorf("score: nil better function")
+		return nil
 	}
 
 	h := &rankHeap{
-		data:   make([]ScoredItem, 0, n),
-		better: opts.Better,
+		data: make([]ScoredItem, 0, n),
 	}
 
 	for _, sym := range opts.Symbols {
@@ -187,7 +189,7 @@ func Rank(opts RankOpts) ([]*symbol.Symbol, error) {
 			heap.Push(h, item)
 			continue
 		}
-		if !opts.Better(item, h.data[0]) {
+		if !betterByScoreImportPathName(item, h.data[0]) {
 			continue
 		}
 		h.data[0] = item
@@ -195,17 +197,12 @@ func Rank(opts RankOpts) ([]*symbol.Symbol, error) {
 	}
 
 	sort.Slice(h.data, func(i, j int) bool {
-		return opts.Better(h.data[i], h.data[j])
+		return betterByScoreImportPathName(h.data[i], h.data[j])
 	})
 
-	result := h.data
-	if opts.TrimFinal && len(result) > n {
-		result = result[:n]
+	out := make([]*symbol.Symbol, len(h.data))
+	for i := range h.data {
+		out[i] = h.data[i].Symbol
 	}
-
-	out := make([]*symbol.Symbol, len(result))
-	for i := range result {
-		out[i] = result[i].Symbol
-	}
-	return out, nil
+	return out
 }

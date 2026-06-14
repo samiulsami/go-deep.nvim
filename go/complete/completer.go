@@ -1,10 +1,10 @@
 package complete
 
 import (
-	"context"
-	"fmt"
+	"path/filepath"
 	"strings"
 
+	"github.com/samiulsami/go-deep.nvim/go/score"
 	"github.com/samiulsami/go-deep.nvim/go/symbol"
 )
 
@@ -18,12 +18,12 @@ type ProcessOptions struct {
 }
 
 type Request struct {
-	Prefix          string
-	Filepath        string
-	CWD             string
-	ImportedPaths   map[string]string
-	MinPrefixLength int
-	Options         ProcessOptions
+	RequestID     uint64            `msgpack:"request_id"`
+	Prefix        string            `msgpack:"prefix"`
+	Filepath      string            `msgpack:"filepath"`
+	CWD           string            `msgpack:"cwd"`
+	ImportedPaths map[string]string `msgpack:"imported_paths"`
+	Options       *ProcessOptions   `msgpack:"options"`
 }
 
 type CompletionItem struct {
@@ -37,202 +37,69 @@ type CompletionItem struct {
 	UserData string `msgpack:"user_data"`
 }
 
-type SymbolMatcher interface {
-	Match(query string, n int) []*symbol.Symbol
-}
-
-type SymbolStore interface {
-	Match(query string, n int) []*symbol.Symbol
-	StoreBatch(syms []*symbol.Symbol)
-}
-
-type Result struct {
-	Items []CompletionItem
-}
-
-type processContext struct {
-	request       Request
-	seenSymbols   map[string]bool
-	packageCounts map[string]int
-	includeSymbol func(Request, *symbol.Symbol) bool
-}
-
-func newProcessContext(req Request, includeSymbol func(Request, *symbol.Symbol) bool) processContext {
-	return processContext{
-		request:       req,
-		seenSymbols:   make(map[string]bool),
-		packageCounts: make(map[string]int),
-		includeSymbol: includeSymbol,
+func Build(req Request, lists ...[]*symbol.Symbol) []CompletionItem {
+	opts := ProcessOptions{
+		MaxItems:           30,
+		MaxFromSamePackage: 4,
+		ExcludeImported:    true,
+		ExcludeInternal:    true,
+		ExcludeTestFiles:   true,
 	}
+	if req.Options != nil {
+		opts = *req.Options
+	}
+
+	ranked := score.Match(score.RankOpts{Query: req.Prefix, Limit: opts.MaxItems}, lists...)
+	filtered := filterSymbols(ranked, opts, req.Filepath, req.ImportedPaths)
+	return buildItems(req, filtered)
 }
 
-func symbolMatches(ctx processContext, s *symbol.Symbol, requirePrefix bool) bool {
-	if s == nil {
-		return false
-	}
-	if requirePrefix {
-		if !strings.HasPrefix(strings.ToLower(s.Name), strings.ToLower(ctx.request.Prefix)) {
-			return false
+func filterSymbols(symbols []*symbol.Symbol, opts ProcessOptions, bufPath string, importedPaths map[string]string) []*symbol.Symbol {
+	seen := make(map[string]bool)
+	pkgCounts := make(map[string]int)
+	matched := make([]*symbol.Symbol, 0)
+	for _, s := range symbols {
+		if s == nil {
+			continue
 		}
-	}
-	if ctx.includeSymbol == nil {
-		return false
-	}
-	return ctx.includeSymbol(ctx.request, s)
-}
-
-func processSymbolBatch(ctx processContext, candidates []*symbol.Symbol, result []*symbol.Symbol) []*symbol.Symbol {
-	matched := result
-	for _, requirePrefix := range []bool{true, false} {
-		matched = appendFilteredSymbols(ctx, matched, candidates, requirePrefix)
-		if len(matched) >= ctx.request.Options.MaxItems {
-			return matched
+		if opts.ExcludeImported && importedPaths[s.ImportPath] != "" {
+			continue
 		}
-	}
-	return matched
-}
-
-func filterSymbols(procCtx processContext, candidates []*symbol.Symbol) []*symbol.Symbol {
-	return appendFilteredSymbols(procCtx, nil, candidates, false)
-}
-
-func appendFilteredSymbols(ctx processContext, result []*symbol.Symbol, candidates []*symbol.Symbol, requirePrefix bool) []*symbol.Symbol {
-	matched := result
-	for _, s := range candidates {
-		if len(matched) >= ctx.request.Options.MaxItems {
-			break
+		if s.Location.Path == bufPath || (s.Location.Path != "" && bufPath != "" && filepath.Base(s.Location.Path) == filepath.Base(bufPath)) {
+			continue
+		}
+		if opts.ExcludeTestFiles && strings.HasSuffix(s.Location.Path, "_test.go") {
+			continue
+		}
+		if opts.ExcludeVendored && s.IsVendored {
+			continue
+		}
+		if opts.ExcludeInternal {
+			if IsInternalImportPath(s.ImportPath) && (!s.IsLocal || !canImportInternal(bufPath, s.Location.Path)) {
+				continue
+			}
 		}
 		hash := symbol.Hash(s)
-		if ctx.seenSymbols[hash] {
+		if seen[hash] {
 			continue
 		}
-		if !symbolMatches(ctx, s, requirePrefix) {
+		if opts.MaxFromSamePackage > 0 && pkgCounts[s.ImportPath] >= opts.MaxFromSamePackage {
 			continue
 		}
-		if ctx.request.Options.MaxFromSamePackage > 0 && ctx.packageCounts[s.ImportPath] >= ctx.request.Options.MaxFromSamePackage {
-			continue
-		}
-		ctx.seenSymbols[hash] = true
-		ctx.packageCounts[s.ImportPath]++
+		seen[hash] = true
+		pkgCounts[s.ImportPath]++
 		matched = append(matched, s)
 	}
 	return matched
 }
 
-type DefaultCompleter struct {
-	projectSymbolCache SymbolStore
-	stdlibCache        SymbolMatcher
-	provider           *Provider
+func containsPathComponent(path, component string) bool {
+	return path == component ||
+		strings.HasPrefix(path, component+"/") ||
+		strings.Contains(path, "/"+component+"/") ||
+		strings.HasSuffix(path, "/"+component)
 }
 
-func NewDefaultWithProvider(
-	projectSymbolCache SymbolStore,
-	stdlibCache SymbolMatcher,
-	provider *Provider,
-) *DefaultCompleter {
-	return &DefaultCompleter{
-		projectSymbolCache: projectSymbolCache,
-		stdlibCache:        stdlibCache,
-		provider:           provider,
-	}
-}
-
-func (c *DefaultCompleter) validate(req Request) (*Provider, error) {
-	if len(req.Prefix) < req.MinPrefixLength {
-		return nil, nil
-	}
-	if c.provider == nil {
-		return nil, fmt.Errorf("completer: nil provider")
-	}
-	if !c.provider.ValidPrefix(req.Prefix) {
-		return nil, nil
-	}
-	if req.Options.MaxItems <= 0 {
-		return nil, nil
-	}
-	return c.provider, nil
-}
-
-func (c *DefaultCompleter) Complete(req Request) (Result, error) {
-	prov, err := c.validate(req)
-	if err != nil {
-		return Result{}, err
-	}
-	if prov == nil {
-		return Result{}, nil
-	}
-
-	filtered := c.completeCandidates(req, prov, nil)
-	if len(filtered) == 0 {
-		return Result{}, nil
-	}
-	items, err := prov.BuildItems(req, filtered)
-	if err != nil {
-		return Result{}, err
-	}
-	return Result{Items: items}, nil
-}
-
-func (c *DefaultCompleter) FetchAndComplete(ctx context.Context, req Request) (Result, error) {
-	prov, err := c.validate(req)
-	if err != nil {
-		return Result{}, err
-	}
-	if prov == nil {
-		return Result{}, nil
-	}
-
-	syms, err := prov.FetchSymbols(ctx, req)
-	if err != nil {
-		result, cacheErr := c.Complete(req)
-		if cacheErr != nil {
-			return Result{}, cacheErr
-		}
-		if len(result.Items) > 0 {
-			return result, nil
-		}
-		return Result{}, err
-	}
-	if c.projectSymbolCache != nil {
-		c.projectSymbolCache.StoreBatch(syms)
-	}
-	filtered := c.completeCandidates(req, prov, syms)
-	if len(filtered) == 0 {
-		return Result{}, nil
-	}
-	items, err := prov.BuildItems(req, filtered)
-	if err != nil {
-		return Result{}, err
-	}
-	return Result{Items: items}, nil
-}
-
-func (c *DefaultCompleter) WarmupCache(ctx context.Context, req Request) error {
-	if c.projectSymbolCache == nil {
-		return nil
-	}
-	syms, err := c.provider.FetchSymbols(ctx, req)
-	if err != nil {
-		return err
-	}
-	c.projectSymbolCache.StoreBatch(syms)
-	return nil
-}
-
-func (c *DefaultCompleter) completeCandidates(req Request, prov *Provider, live []*symbol.Symbol) []*symbol.Symbol {
-	n := req.Options.MaxItems
-	var candidates []*symbol.Symbol
-	if len(live) > 0 {
-		candidates = append(candidates, live...)
-	}
-	if c.projectSymbolCache != nil {
-		candidates = append(candidates, c.projectSymbolCache.Match(req.Prefix, n)...)
-	}
-	if c.stdlibCache != nil {
-		candidates = append(candidates, c.stdlibCache.Match(req.Prefix, n)...)
-	}
-	if len(candidates) == 0 {
-		return nil
-	}
-	return filterSymbols(newProcessContext(req, prov.IncludeSymbol), candidates)
+func IsInternalImportPath(path string) bool {
+	return containsPathComponent(path, "internal")
 }

@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/samiulsami/go-deep.nvim/go/score"
 	"github.com/samiulsami/go-deep.nvim/go/symbol"
 )
 
@@ -30,12 +29,6 @@ const (
 type IndexConfig struct {
 	Enabled bool
 	Path    string
-	Source  BuiltinSource
-}
-
-type BuiltinSource interface {
-	Fingerprint(ctx context.Context) (CacheFingerprint, error)
-	Symbols(ctx context.Context) ([]*symbol.Symbol, error)
 }
 
 type CacheFingerprint struct {
@@ -65,37 +58,6 @@ type goEnv struct {
 	CGOEnabled string `json:"CGO_ENABLED"`
 }
 
-type GoStdlibSource struct{}
-
-func NewGoStdlibSource() GoStdlibSource { return GoStdlibSource{} }
-
-func (GoStdlibSource) Fingerprint(ctx context.Context) (CacheFingerprint, error) {
-	env, err := currentGoEnv(ctx)
-	if err != nil {
-		return CacheFingerprint{}, err
-	}
-	return CacheFingerprint{
-		Language: "go",
-		Provider: "go-stdlib",
-		Tool:     "go",
-		Values: map[string]string{
-			"GOVERSION":   env.GoVersion,
-			"GOROOT":      env.GOROOT,
-			"GOOS":        env.GOOS,
-			"GOARCH":      env.GOARCH,
-			"CGO_ENABLED": env.CGOEnabled,
-		},
-	}, nil
-}
-
-func (GoStdlibSource) Symbols(ctx context.Context) ([]*symbol.Symbol, error) {
-	syms, err := crawlStdlib(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("go stdlib source: %w", err)
-	}
-	return syms, nil
-}
-
 type Index struct {
 	cfg      IndexConfig
 	symbols  []*symbol.Symbol
@@ -108,9 +70,6 @@ func NewIndex(ctx context.Context, cfg IndexConfig) (*Index, error) {
 	idx := &Index{cfg: cfg}
 	if !cfg.Enabled || cfg.Path == "" {
 		return idx, nil
-	}
-	if cfg.Source == nil {
-		return nil, fmt.Errorf("index: nil builtin source")
 	}
 
 	if err := os.MkdirAll(filepath.Dir(cfg.Path), 0o755); err != nil {
@@ -129,7 +88,7 @@ func NewIndex(ctx context.Context, cfg IndexConfig) (*Index, error) {
 			idx.startBuild(ctx, statusReasonStaleCheck, true)
 			return idx, nil
 		}
-		current, err := cfg.Source.Fingerprint(ctx)
+		current, err := stdlibFingerprint(ctx)
 		if err != nil {
 			log.Printf("index: fingerprint check failed, rebuilding: %v", err)
 			idx.startBuild(ctx, statusReasonStaleCheck, true)
@@ -149,29 +108,19 @@ func NewIndex(ctx context.Context, cfg IndexConfig) (*Index, error) {
 	return idx, nil
 }
 
-func (idx *Index) Match(query string, limit int) []*symbol.Symbol {
-	if !idx.ready.Load() || limit <= 0 {
+func (idx *Index) Symbols() []*symbol.Symbol {
+	if !idx.ready.Load() {
 		return nil
 	}
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	return idx.search(query, limit)
-}
-
-func (idx *Index) search(query string, limit int) []*symbol.Symbol {
-	if len(idx.symbols) == 0 || query == "" {
-		return nil
-	}
-	return score.Rank(score.RankOpts{
-		Query:   query,
-		Limit:   limit,
-		Symbols: idx.symbols,
-	})
+	return idx.symbols
 }
 
 func (idx *Index) loadFromCache(cache CacheFile) {
 	idx.mu.Lock()
-	idx.symbols = cloneSymbols(cache.Symbols)
+	idx.symbols = make([]*symbol.Symbol, len(cache.Symbols))
+	copy(idx.symbols, cache.Symbols)
 	idx.mu.Unlock()
 	idx.ready.Store(true)
 }
@@ -204,13 +153,13 @@ func (idx *Index) startBuild(ctx context.Context, reason string, rebuilding bool
 }
 
 func (idx *Index) build(ctx context.Context) (CacheFile, error) {
-	fingerprint, err := idx.cfg.Source.Fingerprint(ctx)
+	fingerprint, err := stdlibFingerprint(ctx)
 	if err != nil {
 		return CacheFile{}, err
 	}
-	symbols, err := idx.cfg.Source.Symbols(ctx)
+	symbols, err := crawlStdlib(ctx)
 	if err != nil {
-		return CacheFile{}, err
+		return CacheFile{}, fmt.Errorf("go stdlib source: %w", err)
 	}
 	now := time.Now().UTC()
 	return CacheFile{
@@ -224,10 +173,23 @@ func (idx *Index) build(ctx context.Context) (CacheFile, error) {
 	}, nil
 }
 
-func cloneSymbols(symbols []*symbol.Symbol) []*symbol.Symbol {
-	cloned := make([]*symbol.Symbol, len(symbols))
-	copy(cloned, symbols)
-	return cloned
+func stdlibFingerprint(ctx context.Context) (CacheFingerprint, error) {
+	env, err := currentGoEnv(ctx)
+	if err != nil {
+		return CacheFingerprint{}, err
+	}
+	return CacheFingerprint{
+		Language: "go",
+		Provider: "go-stdlib",
+		Tool:     "go",
+		Values: map[string]string{
+			"GOVERSION":   env.GoVersion,
+			"GOROOT":      env.GOROOT,
+			"GOOS":        env.GOOS,
+			"GOARCH":      env.GOARCH,
+			"CGO_ENABLED": env.CGOEnabled,
+		},
+	}, nil
 }
 
 func currentGoEnv(ctx context.Context) (goEnv, error) {
@@ -325,14 +287,6 @@ func containsPathComponent(path, component string) bool {
 		strings.HasPrefix(path, component+"/") ||
 		strings.Contains(path, "/"+component+"/") ||
 		strings.HasSuffix(path, "/"+component)
-}
-
-func IsInternalImportPath(path string) bool {
-	return containsPathComponent(path, "internal")
-}
-
-func isVendorImportPath(path string) bool {
-	return containsPathComponent(path, "vendor")
 }
 
 func init() {

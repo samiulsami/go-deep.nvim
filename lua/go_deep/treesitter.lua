@@ -17,12 +17,11 @@ local function get_root_node(bufnr)
 	if not ok or parser == nil then
 		return nil
 	end
-	local root = nil
 	local ok2, parsed = pcall(parser.parse, parser)
 	if ok2 and parsed ~= nil then
-		root = parsed[1]:root()
+		return parsed[1]:root()
 	end
-	return root
+	return nil
 end
 
 ---@param bufnr integer

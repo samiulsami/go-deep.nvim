@@ -7,11 +7,8 @@ import (
 	"github.com/samiulsami/go-deep.nvim/go/symbol"
 )
 
-// NOTE: this is mostly required for the native completion path
-
 // Fuzzy scoring algorithm adapted from junegunn/fzf.
 // See: https://github.com/junegunn/fzf/blob/master/src/algo/algo.go
-
 
 const (
 	ccNone  byte = 0
@@ -157,9 +154,8 @@ func (h *rankHeap) Less(i, j int) bool {
 }
 
 type RankOpts struct {
-	Query   string
-	Limit   int
-	Symbols []*symbol.Symbol
+	Query string
+	Limit int
 }
 
 func betterByScoreImportPathName(a, b ScoredItem) bool {
@@ -172,9 +168,17 @@ func betterByScoreImportPathName(a, b ScoredItem) bool {
 	return a.Symbol.Name < b.Symbol.Name
 }
 
-func Rank(opts RankOpts) []*symbol.Symbol {
+func Match(opts RankOpts, lists ...[]*symbol.Symbol) []*symbol.Symbol {
 	n := opts.Limit
-	if n <= 0 || len(opts.Symbols) == 0 || opts.Query == "" {
+	if n <= 0 || opts.Query == "" {
+		return nil
+	}
+
+	totalLen := 0
+	for _, l := range lists {
+		totalLen += len(l)
+	}
+	if totalLen == 0 {
 		return nil
 	}
 
@@ -182,21 +186,23 @@ func Rank(opts RankOpts) []*symbol.Symbol {
 		data: make([]ScoredItem, 0, n),
 	}
 
-	for _, sym := range opts.Symbols {
-		sc := Score(opts.Query, sym.Haystack)
-		if sc <= 0 {
-			continue
+	for _, list := range lists {
+		for _, sym := range list {
+			sc := Score(opts.Query, sym.Haystack)
+			if sc <= 0 {
+				continue
+			}
+			item := ScoredItem{Symbol: sym, Score: sc}
+			if h.Len() < n {
+				heap.Push(h, item)
+				continue
+			}
+			if !betterByScoreImportPathName(item, h.data[0]) {
+				continue
+			}
+			h.data[0] = item
+			heap.Fix(h, 0)
 		}
-		item := ScoredItem{Symbol: sym, Score: sc}
-		if h.Len() < n {
-			heap.Push(h, item)
-			continue
-		}
-		if !betterByScoreImportPathName(item, h.data[0]) {
-			continue
-		}
-		h.data[0] = item
-		heap.Fix(h, 0)
 	}
 
 	sort.Slice(h.data, func(i, j int) bool {

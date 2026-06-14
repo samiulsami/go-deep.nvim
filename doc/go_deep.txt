@@ -171,7 +171,6 @@ Options are set via `vim.g.go_deep`: >
     vim.g.go_deep = {
         notifications = true,
         min_keyword_length = 3,
-        cache = true,
         index = true,
         index_db_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
         workspace_timeout = 15,
@@ -237,10 +236,6 @@ frontend per buffer.
     `min_keyword_length`                        (integer, default: 3)
         Minimum length of the typed prefix before completions trigger.
 
-                                                 *go_deep-option-cache*
-    `cache`                                     (boolean, default: true)
-        Use the in-memory project symbol store for completion.
-
                                                  *go_deep-option-index*
     `index`                                     (boolean, default: true)
         Build and use the persisted stdlib index.
@@ -285,22 +280,11 @@ FLOW                                                       *go_deep-flow*
 1. `attach_to_buffer()` prepends `Fv:lua.go_deep_completefunc` to |'complete'|
    and installs a `CompleteDone` autocommand for import insertion.
 
-2. On `InsertCharPre`, Lua predicts the next prefix and sends one `symbols`
-   request. With native autocomplete disabled and the menu closed, the request
-   is `warm_only` and returns no items.
-
-3. `go_deep_completefunc()` returns `-2` for async completion. `findstart`
+2. `go_deep_completefunc()` returns `-2` for async completion. `findstart`
    uses a 0-based start column; `vim.fn.complete()` later receives that column
    plus 1.
 
-4. Lua sends imported paths with the request. The Go backend matches warmed
-   project symbols plus stdlib index results, filters/deduplicates them, builds
-   completion items, and sends them back to Lua for visible requests.
-
-5. Background warmup queries `gopls workspace/symbol` and stores normalized
-   project symbols in `ProjectSymbolCache`.
-
-6. On `CompleteDone`, the plugin inserts the missing import statement using
+3. On `CompleteDone`, the plugin inserts the missing import statement using
    tree-sitter.
 
 ============================================================================== 
@@ -316,7 +300,6 @@ CLI: >
 <
 
 Common flags: >
-    --cache
     --index
     --index-db-path string
     --min-prefix-length int

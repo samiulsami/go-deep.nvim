@@ -51,11 +51,10 @@ function M.start(binary, opts)
 		return
 	end
 
-	local ok, result = pcall(function()
+		local ok, result = pcall(function()
 		return vim.fn.jobstart({
 			binary,
 			"serve",
-			"--cache=" .. tostring(opts.cache),
 			"--index=" .. tostring(opts.index),
 			"--index-db-path=" .. tostring(opts.index_db_path or ""),
 			"--min-prefix-length=" .. opts.min_keyword_length,
@@ -97,7 +96,6 @@ end
 ---@field public filepath string
 ---@field public cwd string
 ---@field public imported_paths table<string, string>
----@field public warm_only boolean
 ---@field public min_prefix_length integer | nil
 ---@field public options table | nil
 
@@ -142,21 +140,6 @@ local function request(method, req, handlers)
 	end
 end
 
----@param opts go_deep.Config
----@return table
-local function to_request_options(opts)
-	return {
-		max_items = opts.max_items,
-		max_from_same_package = opts.max_from_same_package,
-		exclude_imported = opts.exclude_imported_packages,
-		exclude_vendored = opts.exclude_vendored_packages,
-		exclude_internal = opts.exclude_internal_packages,
-		exclude_test_files = opts.exclude_test_files,
-	}
-end
-
----@param bufnr integer
----@return boolean
 function M.has_gopls(bufnr)
 	for _, lsp in ipairs(vim.lsp.get_clients({ bufnr = bufnr })) do
 		if lsp.name == "gopls" then
@@ -169,11 +152,11 @@ end
 ---@param bufnr integer
 ---@param prefix string
 ---@param opts go_deep.Config
----@param warm_only boolean
----@return go_deep.client.Request
-local function build_payload(bufnr, prefix, opts, warm_only)
+---@param handlers go_deep.client.RequestHandlers
+---@return boolean
+---@return fun()
+function M.complete(bufnr, prefix, opts, handlers)
 	local imported_paths = treesitter.get_imported_paths(bufnr)
-	-- Empty semantic maps must use vim.empty_dict() so msgpack encodes a map.
 	if vim.tbl_isempty(imported_paths) then
 		imported_paths = vim.empty_dict()
 	end
@@ -183,31 +166,17 @@ local function build_payload(bufnr, prefix, opts, warm_only)
 		filepath = vim.api.nvim_buf_get_name(bufnr),
 		cwd = vim.fn.getcwd(),
 		imported_paths = imported_paths,
-		warm_only = warm_only,
 	}
 	if opts then
-		req.min_prefix_length = opts.min_keyword_length
-		req.options = to_request_options(opts)
+		req.options = {
+			max_items = opts.max_items,
+			max_from_same_package = opts.max_from_same_package,
+			exclude_imported = opts.exclude_imported_packages,
+			exclude_vendored = opts.exclude_vendored_packages,
+			exclude_internal = opts.exclude_internal_packages,
+			exclude_test_files = opts.exclude_test_files,
+		}
 	end
-	return req
-end
-
----@param bufnr integer
----@param prefix string
----@param opts go_deep.Config
-function M.warm(bufnr, prefix, opts)
-	local req = build_payload(bufnr, prefix, opts, true)
-	request("symbols", req, nil)
-end
-
----@param bufnr integer
----@param prefix string
----@param opts go_deep.Config
----@param handlers go_deep.client.RequestHandlers
----@return boolean
----@return fun()
-function M.complete(bufnr, prefix, opts, handlers)
-	local req = build_payload(bufnr, prefix, opts, false)
 	return request("symbols", req, handlers)
 end
 

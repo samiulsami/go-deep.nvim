@@ -2,7 +2,6 @@ go_deep-binary	go_deep.txt	/*go_deep-binary*
 go_deep-blink	go_deep.txt	/*go_deep-blink*
 go_deep-description	go_deep.txt	/*go_deep-description*
 go_deep-flow	go_deep.txt	/*go_deep-flow*
-go_deep-option-cache	go_deep.txt	/*go_deep-option-cache*
 go_deep-option-exclude_imported_packages	go_deep.txt	/*go_deep-option-exclude_imported_packages*
 go_deep-option-exclude_internal_packages	go_deep.txt	/*go_deep-option-exclude_internal_packages*
 go_deep-option-exclude_test_files	go_deep.txt	/*go_deep-option-exclude_test_files*

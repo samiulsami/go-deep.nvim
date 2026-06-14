@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/samiulsami/go-deep.nvim/go/symbol"
 	"go.lsp.dev/jsonrpc2"
+
+	"github.com/samiulsami/go-deep.nvim/go/symbol"
 )
 
 type goplsConn struct {
@@ -22,19 +23,6 @@ func newGoplsConn(rwc io.ReadWriteCloser) *goplsConn {
 	conn := jsonrpc2.NewConn(stream)
 	conn.Go(context.Background(), jsonrpc2.MethodNotFoundHandler)
 	return &goplsConn{conn: conn}
-}
-
-func (c *goplsConn) Call(ctx context.Context, method string, params, result any) error {
-	_, err := c.conn.Call(ctx, method, params, result)
-	return err
-}
-
-func (c *goplsConn) Notify(ctx context.Context, method string, params any) error {
-	return c.conn.Notify(ctx, method, params)
-}
-
-func (c *goplsConn) Close() error {
-	return c.conn.Close()
 }
 
 const (
@@ -55,12 +43,12 @@ type LspSymbol struct {
 	Location      FileLocation `json:"location"`
 }
 
-type GoplsClient struct {
+type Client struct {
 	cmd  *exec.Cmd
 	conn *goplsConn
 }
 
-func NewGoplsClient(ctx context.Context, cwd string) (*GoplsClient, error) {
+func NewClient(ctx context.Context, cwd string) (*Client, error) {
 	ctx, cancel := context.WithTimeout(ctx, clientInitTimeout)
 	defer cancel()
 
@@ -82,7 +70,7 @@ func NewGoplsClient(ctx context.Context, cwd string) (*GoplsClient, error) {
 	conn := newGoplsConn(&stdioRWC{stdin: stdin, stdout: stdout})
 
 	var initResult any
-	if err := conn.Call(ctx, "initialize", map[string]any{
+	if _, err := conn.conn.Call(ctx, "initialize", map[string]any{
 		"processId": nil,
 		"rootUri":   "file://" + cwd,
 		"capabilities": map[string]any{
@@ -92,7 +80,7 @@ func NewGoplsClient(ctx context.Context, cwd string) (*GoplsClient, error) {
 			{"uri": "file://" + cwd, "name": "workspace"},
 		},
 	}, &initResult); err != nil {
-		if closeErr := conn.Close(); closeErr != nil {
+		if closeErr := conn.conn.Close(); closeErr != nil {
 			log.Printf("gopls close after init failure: %v", closeErr)
 		}
 		if waitErr := cmd.Wait(); waitErr != nil {
@@ -100,8 +88,8 @@ func NewGoplsClient(ctx context.Context, cwd string) (*GoplsClient, error) {
 		}
 		return nil, fmt.Errorf("gopls initialize: %w", err)
 	}
-	if err := conn.Notify(ctx, "initialized", map[string]any{}); err != nil {
-		if closeErr := conn.Close(); closeErr != nil {
+	if err := conn.conn.Notify(ctx, "initialized", map[string]any{}); err != nil {
+		if closeErr := conn.conn.Close(); closeErr != nil {
 			log.Printf("gopls close after initialized failure: %v", closeErr)
 		}
 		if waitErr := cmd.Wait(); waitErr != nil {
@@ -110,27 +98,27 @@ func NewGoplsClient(ctx context.Context, cwd string) (*GoplsClient, error) {
 		return nil, fmt.Errorf("gopls initialized: %w", err)
 	}
 
-	return &GoplsClient{cmd: cmd, conn: conn}, nil
+	return &Client{cmd: cmd, conn: conn}, nil
 }
 
-func (c *GoplsClient) WorkspaceSymbol(ctx context.Context, query string) ([]*LspSymbol, error) {
+func (c *Client) WorkspaceSymbol(ctx context.Context, query string) ([]*LspSymbol, error) {
 	var rawSymbols []*LspSymbol
-	if err := c.conn.Call(ctx, "workspace/symbol", map[string]any{"query": query}, &rawSymbols); err != nil {
+	if _, err := c.conn.conn.Call(ctx, "workspace/symbol", map[string]any{"query": query}, &rawSymbols); err != nil {
 		return nil, fmt.Errorf("workspace/symbol: %w", err)
 	}
 	return rawSymbols, nil
 }
 
-func (c *GoplsClient) Close() error {
+func (c *Client) Close() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), clientShutdownTimeout)
 	defer cancel()
-	if err := c.conn.Call(shutdownCtx, "shutdown", nil, nil); err != nil {
+	if _, err := c.conn.conn.Call(shutdownCtx, "shutdown", nil, nil); err != nil {
 		log.Printf("gopls shutdown error: %v", err)
 	}
-	if err := c.conn.Notify(context.Background(), "exit", nil); err != nil {
+	if err := c.conn.conn.Notify(context.Background(), "exit", nil); err != nil {
 		log.Printf("gopls exit notify error: %v", err)
 	}
-	if err := c.conn.Close(); err != nil {
+	if err := c.conn.conn.Close(); err != nil {
 		log.Printf("gopls connection close error: %v", err)
 	}
 
@@ -163,22 +151,22 @@ func (s *stdioRWC) Close() error {
 	return s.stdout.Close()
 }
 
-type GoplsManager struct {
+type Manager struct {
 	ctx    context.Context
 	mu     sync.RWMutex
 	cwd    string
-	client *GoplsClient
+	client *Client
 }
 
-func NewGoplsManager(ctx context.Context, cwd string) (*GoplsManager, error) {
-	client, err := NewGoplsClient(ctx, cwd)
+func NewManager(ctx context.Context, cwd string) (*Manager, error) {
+	client, err := NewClient(ctx, cwd)
 	if err != nil {
 		return nil, err
 	}
-	return &GoplsManager{ctx: ctx, cwd: cwd, client: client}, nil
+	return &Manager{ctx: ctx, cwd: cwd, client: client}, nil
 }
 
-func (m *GoplsManager) WorkspaceSymbol(ctx context.Context, cwd string, query string) ([]*LspSymbol, error) {
+func (m *Manager) WorkspaceSymbol(ctx context.Context, cwd string, query string) ([]*LspSymbol, error) {
 	client, err := m.clientForWorkspace(cwd)
 	if err != nil {
 		return nil, err
@@ -186,7 +174,7 @@ func (m *GoplsManager) WorkspaceSymbol(ctx context.Context, cwd string, query st
 	return client.WorkspaceSymbol(ctx, query)
 }
 
-func (m *GoplsManager) Close() error {
+func (m *Manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.client == nil {
@@ -197,7 +185,7 @@ func (m *GoplsManager) Close() error {
 	return err
 }
 
-func (m *GoplsManager) clientForWorkspace(cwd string) (*GoplsClient, error) {
+func (m *Manager) clientForWorkspace(cwd string) (*Client, error) {
 	m.mu.RLock()
 	if m.client != nil && m.cwd == cwd {
 		client := m.client
@@ -212,7 +200,7 @@ func (m *GoplsManager) clientForWorkspace(cwd string) (*GoplsClient, error) {
 		return m.client, nil
 	}
 
-	client, err := NewGoplsClient(m.ctx, cwd)
+	client, err := NewClient(m.ctx, cwd)
 	if err != nil {
 		log.Printf("failed to create gopls client for %s: %v", cwd, err)
 		return nil, err

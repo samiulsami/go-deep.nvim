@@ -73,7 +73,7 @@ function M.build(path)
 	end
 
 	local bin_path = vim.fs.joinpath(path, "bin", "go-deep")
-	local stamp_path = path and vim.fs.joinpath(path, "bin", "go-deep.version") or nil
+	local stamp_path = vim.fs.joinpath(path, "bin", "go-deep.version")
 	vim.fn.mkdir(vim.fs.dirname(bin_path), "p")
 
 	vim.notify("[go-deep] building backend...", vim.log.levels.INFO)
@@ -82,7 +82,7 @@ function M.build(path)
 	local exit_code = result.code
 	local out = (result.stderr or "") .. (result.stdout or "")
 
-	out = (out or ""):gsub("\n$", "")
+	out = out:gsub("\n$", "")
 
 	if exit_code == 0 then
 		if stamp_path then

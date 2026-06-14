@@ -162,7 +162,6 @@ require("blink.cmp").setup({
 ```lua
 vim.g.go_deep = {
     notifications = true,
-    cache = true,
     index = true,
     index_db_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
     workspace_timeout = 15,

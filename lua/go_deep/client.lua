@@ -57,7 +57,6 @@ function M.start(binary, opts)
 			"serve",
 			"--index=" .. tostring(opts.index),
 			"--index-file-path=" .. tostring(opts.index_file_path or ""),
-			"--min-prefix-length=" .. opts.min_keyword_length,
 			"--max-items=" .. opts.max_items,
 			"--max-from-same-package=" .. (opts.max_from_same_package or 4),
 			"--workspace-timeout=" .. (opts.workspace_timeout or 15),

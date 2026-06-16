@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"go/parser"
-	"go/token"
 	"log"
 	"os"
 	"path/filepath"
@@ -88,7 +86,7 @@ func resolvePackageName(s *symbol.Symbol, packageNames map[string]string) string
 	if name := packageNames[s.Location.Path]; name != "" {
 		return name
 	}
-	if name, ok := parsePackageNameFromFile(s.Location.Path); ok {
+	if name := symbol.ParsePackageNameFromFile(s.Location.Path); name != "" {
 		if validPackageName(name) {
 			packageNames[s.Location.Path] = name
 			return name
@@ -155,18 +153,6 @@ type userDataRange struct {
 type userDataPosition struct {
 	Line      int `json:"line"`
 	Character int `json:"character"`
-}
-
-func parsePackageNameFromFile(path string) (string, bool) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, parser.PackageClauseOnly)
-	if err != nil {
-		return "", false
-	}
-	if file.Name == nil || file.Name.Name == "" {
-		return "", false
-	}
-	return file.Name.Name, true
 }
 
 func parseDocumentationBeforeLine(path string, startLine int) string {

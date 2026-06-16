@@ -2,7 +2,8 @@ package symbol
 
 import (
 	"fmt"
-	"strings"
+	"go/parser"
+	"go/token"
 )
 
 const nullByte = "\x00"
@@ -76,15 +77,24 @@ func BuildHaystack(sym *Symbol) string {
 	if sym == nil {
 		return ""
 	}
-	seg := sym.ImportPath
-	if i := strings.LastIndex(seg, "/"); i >= 0 {
-		seg = seg[i+1:]
+	pkg := sym.PackageName
+	if pkg == "" && sym.Location.Path != "" {
+		pkg = ParsePackageNameFromFile(sym.Location.Path)
+		sym.PackageName = pkg
 	}
-	seg = strings.ReplaceAll(seg, "-", "_")
-	if seg == "" {
+	if pkg == "" {
 		return sym.Name
 	}
-	return seg + nullByte + sym.Name
+	return pkg + nullByte + sym.Name
+}
+
+func ParsePackageNameFromFile(path string) string {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, parser.PackageClauseOnly)
+	if err != nil || file.Name == nil {
+		return ""
+	}
+	return file.Name.Name
 }
 
 func Hash(sym *Symbol) string {

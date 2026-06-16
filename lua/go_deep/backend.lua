@@ -7,7 +7,7 @@ local client = require("go_deep.client")
 local M = {}
 
 local module_path = debug.getinfo(1, "S").source:sub(2)
-local backend_build_version = "v0.0.6"
+local backend_build_version = "v0.0.7"
 
 M.plugin_root = vim.fn.fnamemodify(
 	vim.api.nvim_get_runtime_file("lua/go_deep/init.lua", false)[1] or module_path,

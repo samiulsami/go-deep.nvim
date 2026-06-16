@@ -163,7 +163,7 @@ require("blink.cmp").setup({
 vim.g.go_deep = {
     notifications = true,
     index = true,
-    index_db_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
+    index_file_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
     workspace_timeout = 15,
     min_keyword_length = 3,
     max_items = 30,
@@ -212,7 +212,7 @@ Do not also call `attach_to_buffer()` for blink-managed buffers.
 `'complete'`, sends async completion requests to the backend, and inserts the
 missing import on accept.
 
-Only the vetted Go symbol kinds are surfaced: types, enums, interfaces,
+Only the vetted Go symbol kinds are surfaced: types, interfaces,
 functions, variables, constants, and structs.
 
 ## Logs

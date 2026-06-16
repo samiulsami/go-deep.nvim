@@ -7,7 +7,7 @@ go_deep-option-exclude_internal_packages	go_deep.txt	/*go_deep-option-exclude_in
 go_deep-option-exclude_test_files	go_deep.txt	/*go_deep-option-exclude_test_files*
 go_deep-option-exclude_vendored_packages	go_deep.txt	/*go_deep-option-exclude_vendored_packages*
 go_deep-option-index	go_deep.txt	/*go_deep-option-index*
-go_deep-option-index_db_path	go_deep.txt	/*go_deep-option-index_db_path*
+go_deep-option-index_file_path	go_deep.txt	/*go_deep-option-index_file_path*
 go_deep-option-max_from_same_package	go_deep.txt	/*go_deep-option-max_from_same_package*
 go_deep-option-max_items	go_deep.txt	/*go_deep-option-max_items*
 go_deep-option-min_keyword_length	go_deep.txt	/*go_deep-option-min_keyword_length*

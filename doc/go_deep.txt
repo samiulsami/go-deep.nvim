@@ -160,7 +160,8 @@ Native completion recommended settings: >
     vim.opt.autocomplete = true
 <
 
-Only the vetted Go symbol kinds are surfaced: types, enums, interfaces,
+
+Only the vetted Go symbol kinds are surfaced: types, interfaces,
 functions, variables, constants, and structs.
 
 ==============================================================================
@@ -172,7 +173,7 @@ Options are set via `vim.g.go_deep`: >
         notifications = true,
         min_keyword_length = 3,
         index = true,
-        index_db_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
+        index_file_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
         workspace_timeout = 15,
         max_items = 30,
         max_from_same_package = 4,
@@ -240,8 +241,8 @@ frontend per buffer.
     `index`                                     (boolean, default: true)
         Build and use the persisted stdlib index.
 
-                                         *go_deep-option-index_db_path*
-    `index_db_path`                             (string)
+                                         *go_deep-option-index_file_path*
+    `index_file_path`                             (string)
         Path to the gob-backed stdlib index file.
         Default: `vim.fn.stdpath("data") .. "/go_deep/go_deep.gob"`.
 
@@ -301,8 +302,7 @@ CLI: >
 
 Common flags: >
     --index
-    --index-db-path string
-    --min-prefix-length int
+    --index-file-path string
     --max-items int
     --max-from-same-package int
     --workspace-timeout int

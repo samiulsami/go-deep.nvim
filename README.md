@@ -66,7 +66,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
 vim.opt.completeopt = { "menu", "menuone", "popup", "noselect", "fuzzy" }
 vim.opt.complete = { "o", ".", "w", "b", "u", "t" }
 vim.opt.omnifunc = "v:lua.vim.lsp.omnifunc"
-vim.opt.autocomplete = true
+vim.opt.autocomplete = false
 ```
 
 #### vim.pack + blink.cmp

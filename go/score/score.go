@@ -7,8 +7,8 @@ import (
 	"github.com/samiulsami/go-deep.nvim/go/symbol"
 )
 
-// Fuzzy scoring algorithm adapted from junegunn/fzf.
-// See: https://github.com/junegunn/fzf/blob/master/src/algo/algo.go
+// Fuzzy scoring algorithm stolen from fzf: https://github.com/junegunn/fzf/blob/master/src/algo/algo.go
+// Note: scoring is required for the non-blink native completion path.
 
 const (
 	ccNone  byte = 0

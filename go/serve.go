@@ -21,7 +21,7 @@ import (
 
 type serveConfig struct {
 	Index              bool
-	IndexDBPath        string
+	IndexFilePath      string
 	MaxItems           int
 	MaxFromSamePackage int
 	WorkspaceTimeout   int
@@ -49,7 +49,7 @@ type serveHandler struct {
 func defaultServeConfig() serveConfig {
 	return serveConfig{
 		Index:              true,
-		IndexDBPath:        "",
+		IndexFilePath:      "",
 		MaxItems:           30,
 		MaxFromSamePackage: 4,
 		WorkspaceTimeout:   15,
@@ -65,7 +65,7 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.BoolVar(&cfg.Index, "index", cfg.Index, "crawl and persist default symbols into database")
-	fs.StringVar(&cfg.IndexDBPath, "index-db-path", cfg.IndexDBPath, "path to persistent stdlib symbol database")
+	fs.StringVar(&cfg.IndexFilePath, "index-file-path", cfg.IndexFilePath, "path to persistent stdlib symbol index file")
 	fs.IntVar(&cfg.MaxItems, "max-items", cfg.MaxItems, "maximum completion items returned")
 	fs.IntVar(&cfg.MaxFromSamePackage, "max-from-same-package", cfg.MaxFromSamePackage, "maximum completion items from the same package per query (0 = unlimited)")
 	fs.IntVar(&cfg.WorkspaceTimeout, "workspace-timeout", cfg.WorkspaceTimeout, "workspace query timeout in seconds")
@@ -86,7 +86,7 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	fetchPool := pool.New(ctx, workers)
 
 	log.Printf("serve: index=%v indexDBPath=%q maxItems=%d maxFromSamePackage=%d workspaceTimeout=%ds workers=%d excludeImported=%v excludeVendored=%v excludeInternal=%v excludeTestFiles=%v",
-		cfg.Index, cfg.IndexDBPath,
+		cfg.Index, cfg.IndexFilePath,
 		cfg.MaxItems, cfg.MaxFromSamePackage, cfg.WorkspaceTimeout, workers,
 		cfg.ExcludeImported, cfg.ExcludeVendored, cfg.ExcludeInternal, cfg.ExcludeTestFiles)
 
@@ -94,12 +94,12 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getcwd: %w", err)
 	}
-	if cfg.Index && cfg.IndexDBPath == "" {
+	if cfg.Index && cfg.IndexFilePath == "" {
 		cacheDir, err := os.UserCacheDir()
 		if err != nil {
 			return fmt.Errorf("user cache dir: %w", err)
 		}
-		cfg.IndexDBPath = cacheDir + "/go_deep/go_deep.gob"
+		cfg.IndexFilePath = cacheDir + "/go_deep/go_deep.gob"
 	}
 
 	endpoint, err := rpc.NewEndpoint(os.Stdin, stdout, stdout, rpc.WithLogf(log.Printf))
@@ -114,7 +114,7 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 
 	var stdlibIndex *index.Index
 	if cfg.Index {
-		idx, err := index.NewIndex(ctx, index.IndexConfig{Enabled: true, Path: cfg.IndexDBPath})
+		idx, err := index.NewIndex(ctx, index.IndexConfig{Enabled: true, Path: cfg.IndexFilePath})
 		if err != nil {
 			return fmt.Errorf("index: %w", err)
 		}

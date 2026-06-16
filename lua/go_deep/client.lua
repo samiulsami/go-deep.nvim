@@ -56,7 +56,7 @@ function M.start(binary, opts)
 			binary,
 			"serve",
 			"--index=" .. tostring(opts.index),
-			"--index-db-path=" .. tostring(opts.index_db_path or ""),
+			"--index-file-path=" .. tostring(opts.index_file_path or ""),
 			"--min-prefix-length=" .. opts.min_keyword_length,
 			"--max-items=" .. opts.max_items,
 			"--max-from-same-package=" .. (opts.max_from_same_package or 4),

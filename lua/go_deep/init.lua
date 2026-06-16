@@ -5,7 +5,7 @@ local native = require("go_deep.native")
 ---@field notifications boolean show notifications. default: true
 ---@field cache boolean cache project symbols. default: true
 ---@field index boolean use persisted stdlib index. default: true
----@field index_db_path string stdlib index path. default: vim.fn.stdpath("data") .. "/go_deep/go_deep.gob"
+---@field index_file_path string stdlib index path. default: vim.fn.stdpath("data") .. "/go_deep/go_deep.gob"
 ---@field min_keyword_length integer minimum prefix length. default: 3
 ---@field max_items integer maximum completion items. default: 30
 ---@field max_from_same_package integer maximum items from the same package. default: 4
@@ -23,7 +23,7 @@ M.defaults = {
 	notifications = true,
 	cache = true,
 	index = true,
-	index_db_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
+	index_file_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
 	min_keyword_length = 3,
 	max_items = 30,
 	max_from_same_package = 4,
@@ -66,11 +66,11 @@ local function validate_opts(opts, path, allow_notifications)
 	if opts.index ~= nil and type(opts.index) ~= "boolean" then
 		errors[#errors + 1] = path .. ".index must be a boolean"
 	end
-	if opts.index_db_path ~= nil then
-		if type(opts.index_db_path) ~= "string" then
-			errors[#errors + 1] = path .. ".index_db_path must be a string"
-		elseif opts.index_db_path == "" then
-			errors[#errors + 1] = path .. ".index_db_path must not be empty"
+	if opts.index_file_path ~= nil then
+		if type(opts.index_file_path) ~= "string" then
+			errors[#errors + 1] = path .. ".index_file_path must be a string"
+		elseif opts.index_file_path == "" then
+			errors[#errors + 1] = path .. ".index_file_path must not be empty"
 		end
 	end
 	if opts.min_keyword_length ~= nil then

@@ -77,7 +77,22 @@ local function apply_completion(ctx, items)
 			return
 		end
 		state.refreshing[ctx.bufnr] = true
-		vim.fn.complete(ctx.start_col + 1, items)
+
+		-- merge with existing pum items (lsp, keywords, etc.)
+		local merged = {}
+		if vim.fn.pumvisible() == 1 then
+			local info = vim.fn.complete_info({ "items" })
+			if info and info.items then
+				for _, item in ipairs(info.items) do
+					merged[#merged + 1] = item
+				end
+			end
+		end
+		for _, item in ipairs(items) do
+			merged[#merged + 1] = item
+		end
+
+		vim.fn.complete(ctx.start_col + 1, merged)
 		vim.schedule(function()
 			state.refreshing[ctx.bufnr] = nil
 		end)

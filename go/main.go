@@ -16,6 +16,10 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go func() {
+		<-ctx.Done()
+		os.Exit(0)
+	}()
 
 	if len(os.Args) < 2 {
 		log.Fatal("usage: go-deep serve [flags]")

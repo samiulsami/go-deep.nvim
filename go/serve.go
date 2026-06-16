@@ -138,13 +138,10 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 		fetchPool:    fetchPool,
 		stdlibIndex:  stdlibIndex,
 	}
-	serveErr := h.serve(endpoint)
 
-	if closeErr := goplsManager.Close(); closeErr != nil {
-		log.Printf("workspace client close error: %v", closeErr)
-	}
-
-	return serveErr
+	h.serve(endpoint)
+	os.Exit(0)
+	return nil
 }
 
 func (h *serveHandler) serve(e *rpc.Endpoint) error {

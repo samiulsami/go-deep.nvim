@@ -26,9 +26,7 @@ func newGoplsConn(rwc io.ReadWriteCloser) *goplsConn {
 }
 
 const (
-	clientInitTimeout     = 30 * time.Second
-	clientShutdownTimeout = 5 * time.Second
-	clientKillTimeout     = 5 * time.Second
+	clientInitTimeout = 30 * time.Second
 )
 
 type FileLocation struct {
@@ -109,31 +107,10 @@ func (c *Client) WorkspaceSymbol(ctx context.Context, query string) ([]*LspSymbo
 	return rawSymbols, nil
 }
 
-func (c *Client) Close() error {
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), clientShutdownTimeout)
-	defer cancel()
-	if _, err := c.conn.conn.Call(shutdownCtx, "shutdown", nil, nil); err != nil {
-		log.Printf("gopls shutdown error: %v", err)
-	}
-	if err := c.conn.conn.Notify(context.Background(), "exit", nil); err != nil {
-		log.Printf("gopls exit notify error: %v", err)
-	}
-	if err := c.conn.conn.Close(); err != nil {
-		log.Printf("gopls connection close error: %v", err)
-	}
-
-	done := make(chan error, 1)
-	go func() { done <- c.cmd.Wait() }()
-	select {
-	case <-time.After(clientKillTimeout):
-		if err := c.cmd.Process.Kill(); err != nil {
-			log.Printf("gopls kill error: %v", err)
-		}
-		<-done
-		return fmt.Errorf("gopls did not exit cleanly after %s, killed", clientKillTimeout)
-	case err := <-done:
-		return err
-	}
+func (c *Client) Kill() {
+	c.conn.conn.Close()
+	c.cmd.Process.Kill()
+	c.cmd.Wait()
 }
 
 type stdioRWC struct {
@@ -174,15 +151,14 @@ func (m *Manager) WorkspaceSymbol(ctx context.Context, cwd string, query string)
 	return client.WorkspaceSymbol(ctx, query)
 }
 
-func (m *Manager) Close() error {
+func (m *Manager) Kill() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.client == nil {
-		return nil
+		return
 	}
-	err := m.client.Close()
+	m.client.Kill()
 	m.client = nil
-	return err
 }
 
 func (m *Manager) clientForWorkspace(cwd string) (*Client, error) {
@@ -210,8 +186,8 @@ func (m *Manager) clientForWorkspace(cwd string) (*Client, error) {
 	m.client = client
 	m.cwd = cwd
 	if old != nil {
-		err = old.Close()
-		log.Printf("closed old gopls client for %s: %v", oldCWD, err)
+		old.Kill()
+		log.Printf("closed old gopls client for %s", oldCWD)
 	}
 	return client, nil
 }

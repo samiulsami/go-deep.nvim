@@ -44,6 +44,16 @@ function M.is_running()
 	return vim.fn.jobwait({ state.job_id }, 0)[1] == -1
 end
 
+function M.stop()
+	local job_id = state.job_id
+	if not job_id then
+		return
+	end
+	state.job_id = nil
+	state.channel = nil
+	pcall(vim.fn.jobstop, job_id)
+end
+
 ---@param binary string
 ---@param opts table
 function M.start(binary, opts)
@@ -195,5 +205,10 @@ function M._dispatch(reply)
 		pending.on_items(reply)
 	end
 end
+
+vim.api.nvim_create_autocmd("VimLeavePre", {
+	group = vim.api.nvim_create_augroup("go_deep_client", { clear = true }),
+	callback = M.stop,
+})
 
 return M

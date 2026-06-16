@@ -12,8 +12,6 @@ import (
 
 var sessionLogNamePattern = regexp.MustCompile(`^\d{8}-\d{6}-\d+\.log$`)
 
-const logCutoffDuration = 72 * time.Hour
-
 func setupSessionLog() {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
@@ -44,26 +42,12 @@ func rotateLogs(logDir string, keep int) {
 		return
 	}
 
-	cutoff := time.Now().Add(-logCutoffDuration)
-
 	var logs []string
 	for _, entry := range entries {
 		if entry.IsDir() || !sessionLogNamePattern.MatchString(entry.Name()) {
 			continue
 		}
-
-		path := filepath.Join(logDir, entry.Name())
-
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-
-		if info.ModTime().After(cutoff) {
-			continue
-		}
-
-		logs = append(logs, path)
+		logs = append(logs, filepath.Join(logDir, entry.Name()))
 	}
 
 	sort.Strings(logs)

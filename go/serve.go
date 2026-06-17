@@ -139,9 +139,7 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 		stdlibIndex:  stdlibIndex,
 	}
 
-	h.serve(endpoint)
-	os.Exit(0)
-	return nil
+	return h.serve(endpoint)
 }
 
 func (h *serveHandler) serve(e *rpc.Endpoint) error {

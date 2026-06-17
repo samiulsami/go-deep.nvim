@@ -33,6 +33,8 @@ func main() {
 		err = fmt.Errorf("unknown command %q", os.Args[1])
 	}
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		os.Exit(1)
 	}
+	os.Exit(0)
 }

@@ -107,10 +107,16 @@ func (c *Client) WorkspaceSymbol(ctx context.Context, query string) ([]*LspSymbo
 	return rawSymbols, nil
 }
 
-func (c *Client) Kill() {
-	c.conn.conn.Close()
-	c.cmd.Process.Kill()
-	c.cmd.Wait()
+func (c *Client) kill() {
+	if err := c.conn.conn.Close(); err != nil {
+		log.Printf("failed to close gopls connection: %v", err)
+	}
+	if err := c.cmd.Process.Kill(); err != nil {
+		log.Printf("failed to kill gopls process: %v", err)
+	}
+	if err := c.cmd.Wait(); err != nil {
+		log.Printf("failed to wait for gopls process: %v", err)
+	}
 }
 
 type stdioRWC struct {
@@ -157,7 +163,7 @@ func (m *Manager) Kill() {
 	if m.client == nil {
 		return
 	}
-	m.client.Kill()
+	m.client.kill()
 	m.client = nil
 }
 
@@ -186,7 +192,7 @@ func (m *Manager) clientForWorkspace(cwd string) (*Client, error) {
 	m.client = client
 	m.cwd = cwd
 	if old != nil {
-		old.Kill()
+		old.kill()
 		log.Printf("closed old gopls client for %s", oldCWD)
 	}
 	return client, nil

@@ -8,7 +8,7 @@ At the time of writing, the Go Language Server (```gopls@v0.22.0```) doesn't see
 
 #### How?
 
-Query  ```gopls's``` ```workspace/symbol``` endpoint, keep project symbols in memory, build a persisted stdlib index, convert the resulting ```SymbolInformation``` into ```completionItemKinds```, filter the resuls then feed them back into native completion / ```blink.cmp```
+Build a stdlib index upon first startup, query ```gopls's``` ```workspace/symbol``` endpoint upon each keystroke, merge the results with matching stdlib symbols, then feed them back into native completion / ```blink.cmp```
 
 ---
 

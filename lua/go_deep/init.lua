@@ -10,6 +10,8 @@ local native = require("go_deep.native")
 ---@field max_items integer maximum completion items. default: 30
 ---@field max_from_same_package integer maximum items from the same package. default: 4
 ---@field workspace_timeout integer workspace/symbol timeout in seconds. default: 15
+---@field workspace_symbols boolean include workspace/gopls symbols. default: true
+---@field stdlib_symbols boolean include indexed stdlib symbols. default: true
 ---@field exclude_imported_packages boolean exclude imported packages. default: true
 ---@field exclude_vendored_packages boolean exclude vendored packages. default: false
 ---@field exclude_internal_packages boolean exclude inaccessible internal packages. default: true
@@ -28,6 +30,8 @@ M.defaults = {
 	max_items = 30,
 	max_from_same_package = 4,
 	workspace_timeout = 15,
+	workspace_symbols = true,
+	stdlib_symbols = true,
 	exclude_imported_packages = true,
 	exclude_vendored_packages = false,
 	exclude_internal_packages = true,
@@ -100,6 +104,12 @@ local function validate_opts(opts, path, allow_notifications)
 		elseif opts.workspace_timeout < 1 then
 			errors[#errors + 1] = path .. ".workspace_timeout must be >= 1"
 		end
+	end
+	if opts.workspace_symbols ~= nil and type(opts.workspace_symbols) ~= "boolean" then
+		errors[#errors + 1] = path .. ".workspace_symbols must be a boolean"
+	end
+	if opts.stdlib_symbols ~= nil and type(opts.stdlib_symbols) ~= "boolean" then
+		errors[#errors + 1] = path .. ".stdlib_symbols must be a boolean"
 	end
 	if opts.exclude_imported_packages ~= nil and type(opts.exclude_imported_packages) ~= "boolean" then
 		errors[#errors + 1] = path .. ".exclude_imported_packages must be a boolean"

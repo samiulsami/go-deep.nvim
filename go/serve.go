@@ -25,6 +25,8 @@ type serveConfig struct {
 	MaxItems           int
 	MaxFromSamePackage int
 	WorkspaceTimeout   int
+	WorkspaceSymbols   bool
+	StdlibSymbols      bool
 	ExcludeImported    bool
 	ExcludeVendored    bool
 	ExcludeInternal    bool
@@ -53,6 +55,8 @@ func defaultServeConfig() serveConfig {
 		MaxItems:           30,
 		MaxFromSamePackage: 4,
 		WorkspaceTimeout:   15,
+		WorkspaceSymbols:   true,
+		StdlibSymbols:      true,
 		ExcludeImported:    true,
 		ExcludeVendored:    false,
 		ExcludeInternal:    true,
@@ -69,6 +73,8 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	fs.IntVar(&cfg.MaxItems, "max-items", cfg.MaxItems, "maximum completion items returned")
 	fs.IntVar(&cfg.MaxFromSamePackage, "max-from-same-package", cfg.MaxFromSamePackage, "maximum completion items from the same package per query (0 = unlimited)")
 	fs.IntVar(&cfg.WorkspaceTimeout, "workspace-timeout", cfg.WorkspaceTimeout, "workspace query timeout in seconds")
+	fs.BoolVar(&cfg.WorkspaceSymbols, "workspace-symbols", cfg.WorkspaceSymbols, "include workspace symbols from gopls")
+	fs.BoolVar(&cfg.StdlibSymbols, "stdlib-symbols", cfg.StdlibSymbols, "include indexed stdlib symbols")
 	fs.BoolVar(&cfg.ExcludeImported, "exclude-imported", cfg.ExcludeImported, "exclude imported packages")
 	fs.BoolVar(&cfg.ExcludeVendored, "exclude-vendored", cfg.ExcludeVendored, "exclude vendored packages")
 	fs.BoolVar(&cfg.ExcludeInternal, "exclude-internal", cfg.ExcludeInternal, "exclude internal packages per Go's rules")
@@ -85,9 +91,9 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	workers := runtime.GOMAXPROCS(0)
 	fetchPool := pool.New(ctx, workers)
 
-	log.Printf("serve: index=%v indexDBPath=%q maxItems=%d maxFromSamePackage=%d workspaceTimeout=%ds workers=%d excludeImported=%v excludeVendored=%v excludeInternal=%v excludeTestFiles=%v",
+	log.Printf("serve: index=%v indexDBPath=%q maxItems=%d maxFromSamePackage=%d workspaceTimeout=%ds workspaceSymbols=%v stdlibSymbols=%v workers=%d excludeImported=%v excludeVendored=%v excludeInternal=%v excludeTestFiles=%v",
 		cfg.Index, cfg.IndexFilePath,
-		cfg.MaxItems, cfg.MaxFromSamePackage, cfg.WorkspaceTimeout, workers,
+		cfg.MaxItems, cfg.MaxFromSamePackage, cfg.WorkspaceTimeout, cfg.WorkspaceSymbols, cfg.StdlibSymbols, workers,
 		cfg.ExcludeImported, cfg.ExcludeVendored, cfg.ExcludeInternal, cfg.ExcludeTestFiles)
 
 	cwd, err := os.Getwd()
@@ -113,7 +119,7 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	}
 
 	var stdlibIndex *index.Index
-	if cfg.Index {
+	if cfg.Index && cfg.StdlibSymbols {
 		idx, err := index.NewIndex(ctx, index.IndexConfig{Enabled: true, Path: cfg.IndexFilePath})
 		if err != nil {
 			return fmt.Errorf("index: %w", err)
@@ -124,6 +130,8 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	opts := complete.ProcessOptions{
 		MaxItems:           cfg.MaxItems,
 		MaxFromSamePackage: cfg.MaxFromSamePackage,
+		WorkspaceSymbols:   cfg.WorkspaceSymbols,
+		StdlibSymbols:      cfg.StdlibSymbols,
 		ExcludeImported:    cfg.ExcludeImported,
 		ExcludeVendored:    cfg.ExcludeVendored,
 		ExcludeInternal:    cfg.ExcludeInternal,
@@ -169,21 +177,23 @@ func (h *serveHandler) handleSymbols(e *rpc.Endpoint, req complete.Request) {
 			requestID := req.RequestID
 			rpcEndpoint := e
 
-			rawWs, err := h.goplsManager.WorkspaceSymbol(fetchCtx, req.CWD, req.Prefix)
-			if err != nil {
-				log.Printf("[%d] workspace symbols: %v", id, err)
-				return
-			}
-
-			wsSymbols := make([]*symbol.Symbol, 0, len(rawWs))
-			for _, raw := range rawWs {
-				if sym, ok := gopls.ConvertLSPSymbolToSymbol(raw, req.CWD); ok {
-					wsSymbols = append(wsSymbols, sym)
+			var wsSymbols []*symbol.Symbol
+			if effectiveOpts.WorkspaceSymbols {
+				rawWs, err := h.goplsManager.WorkspaceSymbol(fetchCtx, req.CWD, req.Prefix)
+				if err != nil {
+					log.Printf("[%d] workspace symbols: %v", id, err)
+					return
+				}
+				wsSymbols = make([]*symbol.Symbol, 0, len(rawWs))
+				for _, raw := range rawWs {
+					if sym, ok := gopls.ConvertLSPSymbolToSymbol(raw, req.CWD); ok {
+						wsSymbols = append(wsSymbols, sym)
+					}
 				}
 			}
 
 			var stdlibSymbols []*symbol.Symbol
-			if h.stdlibIndex != nil {
+			if effectiveOpts.StdlibSymbols && h.stdlibIndex != nil {
 				stdlibSymbols = h.stdlibIndex.Symbols()
 			}
 

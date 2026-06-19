@@ -70,6 +70,8 @@ function M.start(binary, opts)
 			"--max-items=" .. opts.max_items,
 			"--max-from-same-package=" .. (opts.max_from_same_package or 4),
 			"--workspace-timeout=" .. (opts.workspace_timeout or 15),
+			"--workspace-symbols=" .. tostring(opts.workspace_symbols),
+			"--stdlib-symbols=" .. tostring(opts.stdlib_symbols),
 			"--exclude-imported=" .. tostring(opts.exclude_imported_packages),
 			"--exclude-vendored=" .. tostring(opts.exclude_vendored_packages),
 			"--exclude-internal=" .. tostring(opts.exclude_internal_packages),
@@ -180,6 +182,8 @@ function M.complete(bufnr, prefix, opts, handlers)
 		req.options = {
 			max_items = opts.max_items,
 			max_from_same_package = opts.max_from_same_package,
+			workspace_symbols = opts.workspace_symbols,
+			stdlib_symbols = opts.stdlib_symbols,
 			exclude_imported = opts.exclude_imported_packages,
 			exclude_vendored = opts.exclude_vendored_packages,
 			exclude_internal = opts.exclude_internal_packages,

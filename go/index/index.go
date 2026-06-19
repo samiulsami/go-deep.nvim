@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	schemaVersion             = "v0.0.3"
+	schemaVersion             = "v0.0.4"
 	statusReasonExisting      = "existing"
 	statusReasonMissing       = "missing_or_empty"
 	statusReasonSchemaChanged = "schema_changed"

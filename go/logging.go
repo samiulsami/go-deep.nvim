@@ -24,13 +24,13 @@ func setupSessionLog() {
 	}
 
 	pid := os.Getpid()
-	rotateLogs(logDir, 7)
 
 	logPath := filepath.Join(logDir, fmt.Sprintf("%s-%d.log", time.Now().Format("20060102-150405"), pid))
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return
 	}
+	rotateLogs(logDir, 7)
 
 	log.SetOutput(file)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Llongfile)

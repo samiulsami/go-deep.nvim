@@ -1,12 +1,14 @@
 package index
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"log"
 	"os/exec"
 	"path/filepath"
@@ -125,9 +127,17 @@ func listStdPackages(ctx context.Context) ([]stdPackage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("go list std: %w", err)
 	}
+	dec := json.NewDecoder(bytes.NewReader(out))
 	var pkgs []stdPackage
-	if err := json.Unmarshal(out, &pkgs); err != nil {
-		return nil, err
+	for {
+		var pkg stdPackage
+		if err := dec.Decode(&pkg); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+		pkgs = append(pkgs, pkg)
 	}
 	return pkgs, nil
 }

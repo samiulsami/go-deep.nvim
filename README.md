@@ -12,7 +12,7 @@ Build a stdlib index upon first startup, query ```gopls's``` ```workspace/symbol
 
 ---
 
-[Demo video](demo/go-deep-demo.mp4)
+https://github.com/user-attachments/assets/c0d82a0d-d314-44b2-8e9d-80f424382724
 
 ⚠️ <i> First startup may stutter while the stdlib index is being built </i>
 

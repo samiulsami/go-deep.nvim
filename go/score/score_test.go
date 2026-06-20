@@ -61,3 +61,57 @@ func TestMatchMultipleLists(t *testing.T) {
 		t.Fatalf("expected 2 results, got %d", len(got))
 	}
 }
+
+func TestScoreExactMatchBonus(t *testing.T) {
+	exact := Score("abc", "abc")
+	partial := Score("abc", "xabcx")
+	if exact <= partial {
+		t.Fatalf("exact match should score higher: exact=%d partial=%d", exact, partial)
+	}
+}
+
+func TestScoreNoMatchReturnsZero(t *testing.T) {
+	if s := Score("xyz", "abc"); s != 0 {
+		t.Fatalf("expected 0 for no match, got %d", s)
+	}
+}
+
+func TestScoreCaseInsensitive(t *testing.T) {
+	lower := Score("print", "Println")
+	upper := Score("Print", "Println")
+	if lower == 0 {
+		t.Fatal("case-insensitive match should not return 0")
+	}
+	if upper == 0 {
+		t.Fatal("exact case match should not return 0")
+	}
+}
+
+func TestScoreEmptyQueryReturnsZero(t *testing.T) {
+	if s := Score("", "anything"); s != 0 {
+		t.Fatalf("expected 0 for empty query, got %d", s)
+	}
+}
+
+func TestMatchLimitRespected(t *testing.T) {
+	syms := []*symbol.Symbol{
+		{Name: "Println", ImportPath: "fmt", Haystack: "fmt\x00Println"},
+		{Name: "Printf", ImportPath: "fmt", Haystack: "fmt\x00Printf"},
+		{Name: "Sprint", ImportPath: "fmt", Haystack: "fmt\x00Sprint"},
+		{Name: "Print", ImportPath: "fmt", Haystack: "fmt\x00Print"},
+	}
+	got := Match(RankOpts{Query: "pri", Limit: 2}, syms)
+	if len(got) > 2 {
+		t.Fatalf("expected at most 2 results, got %d", len(got))
+	}
+}
+
+func TestMatchEmptyQueryReturnsNil(t *testing.T) {
+	syms := []*symbol.Symbol{
+		{Name: "Println", ImportPath: "fmt", Haystack: "fmt\x00Println"},
+	}
+	got := Match(RankOpts{Query: "", Limit: 10}, syms)
+	if got != nil {
+		t.Fatal("expected nil for empty query")
+	}
+}

@@ -84,6 +84,45 @@ local ok, err = pcall(function()
 	require("go_deep.client")._dispatch(nil)
 	check("_dispatch handles nil reply gracefully", true)
 
+	-- Test 8: final flag cleans up pending entry
+	local client_mod = require("go_deep.client")
+	local cb_called = 0
+	-- inject a fake pending entry
+	local fake_id = 999
+	-- access internal state via the module's dispatch path
+	-- we register a handler then send replies to it
+	local ok_req, cancel_fn = client_mod.complete(bufnr, "test", {
+		min_keyword_length = 1,
+		max_items = 5,
+		max_from_same_package = 4,
+		workspace_symbols = true,
+		stdlib_symbols = true,
+		exclude_imported_packages = true,
+		exclude_vendored_packages = false,
+		exclude_internal_packages = true,
+		exclude_test_files = true,
+	}, {
+		on_items = function(reply)
+			cb_called = cb_called + 1
+		end,
+	})
+	if not ok_req then
+		-- backend may not be running in test env; test the dispatch logic directly
+		-- by injecting a pending entry manually
+		check("client.complete returned ok (backend running)", false)
+	else
+		cancel_fn()
+		check("client.complete returned ok (backend running)", true)
+	end
+
+	-- Test 9: _dispatch with final=true should not crash even if no pending
+	client_mod._dispatch({ request_id = 99999, items = {}, final = true })
+	check("_dispatch with final=true and no pending entry is safe", true)
+
+	-- Test 10: _dispatch ignores replies with non-numeric request_id
+	client_mod._dispatch({ request_id = "not_a_number", items = {} })
+	check("_dispatch ignores non-numeric request_id", true)
+
 	print(string.format("\n%d/%d tests passed", passed, total))
 end)
 

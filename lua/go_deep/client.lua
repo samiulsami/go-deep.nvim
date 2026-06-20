@@ -74,6 +74,7 @@ function M.start(binary, opts)
 			"--workspace-timeout=" .. (opts.workspace_timeout or 15),
 			"--workspace-symbols=" .. tostring(opts.workspace_symbols),
 			"--stdlib-symbols=" .. tostring(opts.stdlib_symbols),
+			"--completion-cache=" .. tostring(opts.completion_cache),
 			"--exclude-imported=" .. tostring(opts.exclude_imported_packages),
 			"--exclude-vendored=" .. tostring(opts.exclude_vendored_packages),
 			"--exclude-internal=" .. tostring(opts.exclude_internal_packages),

@@ -15,6 +15,7 @@ local native = require("go_deep.native")
 ---@field exclude_vendored_packages boolean exclude vendored packages. default: false
 ---@field exclude_internal_packages boolean exclude inaccessible internal packages. default: true
 ---@field exclude_test_files boolean exclude *_test.go symbols. default: true
+---@field completion_cache boolean cache workspace/symbol results in-memory. default: true
 
 ---@class go_deep
 local M = {}
@@ -34,6 +35,7 @@ M.defaults = {
 	exclude_vendored_packages = false,
 	exclude_internal_packages = true,
 	exclude_test_files = true,
+	completion_cache = true,
 }
 
 ---@param value any
@@ -117,6 +119,9 @@ local function validate_opts(opts, path, allow_notifications)
 	end
 	if opts.exclude_test_files ~= nil and type(opts.exclude_test_files) ~= "boolean" then
 		errors[#errors + 1] = path .. ".exclude_test_files must be a boolean"
+	end
+	if opts.completion_cache ~= nil and type(opts.completion_cache) ~= "boolean" then
+		errors[#errors + 1] = path .. ".completion_cache must be a boolean"
 	end
 
 	if #errors > 0 then

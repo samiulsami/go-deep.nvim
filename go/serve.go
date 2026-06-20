@@ -31,6 +31,7 @@ type serveConfig struct {
 	ExcludeVendored    bool
 	ExcludeInternal    bool
 	ExcludeTestFiles   bool
+	CompletionCache    bool
 }
 
 type replyPayload struct {
@@ -51,6 +52,7 @@ type serveHandler struct {
 	goplsManager *gopls.Manager
 	options      complete.ProcessOptions
 	reqID        atomic.Uint64
+	cache        *symCache
 	fetchPool    *pool.Pool
 	stdlibIndex  *index.Index
 }
@@ -67,6 +69,7 @@ func defaultServeConfig() serveConfig {
 		ExcludeVendored:    false,
 		ExcludeInternal:    true,
 		ExcludeTestFiles:   true,
+		CompletionCache:    true,
 	}
 }
 
@@ -85,6 +88,7 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	fs.BoolVar(&cfg.ExcludeVendored, "exclude-vendored", cfg.ExcludeVendored, "exclude vendored packages")
 	fs.BoolVar(&cfg.ExcludeInternal, "exclude-internal", cfg.ExcludeInternal, "exclude internal packages per Go's rules")
 	fs.BoolVar(&cfg.ExcludeTestFiles, "exclude-test-files", cfg.ExcludeTestFiles, "exclude symbols from *_test.go files")
+	fs.BoolVar(&cfg.CompletionCache, "completion-cache", cfg.CompletionCache, "cache workspace/symbol results in-memory")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -117,6 +121,11 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	endpoint, err := rpc.NewEndpoint(os.Stdin, stdout, stdout, rpc.WithLogf(log.Printf))
 	if err != nil {
 		return err
+	}
+
+	var cache *symCache
+	if cfg.CompletionCache && cfg.WorkspaceSymbols {
+		cache = newSymCache(defaultCacheSize)
 	}
 
 	var goplsManager *gopls.Manager
@@ -154,6 +163,7 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 		goplsManager: goplsManager,
 		options:      opts,
 		fetchPool:    fetchPool,
+		cache:        cache,
 		stdlibIndex:  stdlibIndex,
 	}
 
@@ -217,6 +227,17 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 		return
 	}
 
+	cacheKey := req.Prefix + "\x00" + req.CWD
+
+	if handler.cache != nil {
+		if wsSymbols, ok := handler.cache.Lookup(req.Prefix, req.CWD); ok {
+			items := complete.Build(buildReq, seenHashes, wsSymbols)
+			log.Printf("[%d] workspace (cached): %d items", id, len(items))
+			handler.sendSymbols(id, endpoint, req.RequestID, items, true)
+			return
+		}
+	}
+
 	handler.fetchPool.Submit(func() {
 		fetchCtx, cancel := context.WithTimeout(handler.ctx, time.Duration(handler.cfg.WorkspaceTimeout)*time.Second)
 		defer cancel()
@@ -232,6 +253,9 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 			if sym, ok := gopls.ConvertLSPSymbolToSymbol(raw, req.CWD); ok {
 				wsSymbols = append(wsSymbols, sym)
 			}
+		}
+		if handler.cache != nil {
+			handler.cache.Put(cacheKey, wsSymbols)
 		}
 		items := complete.Build(buildReq, seenHashes, wsSymbols)
 		log.Printf("[%d] workspace: %d items", id, len(items))

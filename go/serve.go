@@ -223,7 +223,6 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 			items := complete.Build(buildReq, seenHashes, wsSymbols)
 			log.Printf("[%d] workspace (cached): %d items", id, len(items))
 			handler.sendSymbols(id, endpoint, req.RequestID, items, true)
-			return
 		}
 	}
 

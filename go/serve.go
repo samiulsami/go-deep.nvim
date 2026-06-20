@@ -162,7 +162,7 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 
 func (handler *serveHandler) serve(endpoint *rpc.Endpoint) error {
 	if err := endpoint.Register("symbols", func(e *rpc.Endpoint, req complete.Request) {
-		go handler.handleSymbols(e, req)
+		handler.handleSymbols(e, req)
 	}, endpoint); err != nil {
 		return err
 	}
@@ -194,18 +194,22 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 		Options:       &effectiveOpts,
 	}
 
-	workspaceEnabled := effectiveOpts.WorkspaceSymbols && handler.goplsManager != nil
+	workspaceSymbolsEnabled := effectiveOpts.WorkspaceSymbols && handler.goplsManager != nil
 
+	var seenHashes map[string]struct{}
 	if effectiveOpts.StdlibSymbols && handler.stdlibIndex != nil {
 		if stdlibSymbols := handler.stdlibIndex.Symbols(); len(stdlibSymbols) > 0 {
-			if items := complete.Build(buildReq, stdlibSymbols); len(items) > 0 {
+			if workspaceSymbolsEnabled {
+				seenHashes = make(map[string]struct{})
+			}
+			if items := complete.Build(buildReq, seenHashes, stdlibSymbols); len(items) > 0 {
 				log.Printf("[%d] stdlib: %d items", id, len(items))
-				handler.sendSymbols(id, endpoint, req.RequestID, items, !workspaceEnabled)
+				handler.sendSymbols(id, endpoint, req.RequestID, items, !workspaceSymbolsEnabled)
 			}
 		}
 	}
 
-	if !workspaceEnabled {
+	if !workspaceSymbolsEnabled {
 		if effectiveOpts.StdlibSymbols && handler.stdlibIndex != nil {
 			return
 		}
@@ -229,7 +233,7 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 				wsSymbols = append(wsSymbols, sym)
 			}
 		}
-		items := complete.Build(buildReq, wsSymbols)
+		items := complete.Build(buildReq, seenHashes, wsSymbols)
 		log.Printf("[%d] workspace: %d items", id, len(items))
 		handler.sendSymbols(id, endpoint, req.RequestID, items, true)
 	})

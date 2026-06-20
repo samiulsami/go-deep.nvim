@@ -6,7 +6,7 @@ import (
 	"github.com/samiulsami/go-deep.nvim/go/symbol"
 )
 
-func baseSym(name, impPath string, kind symbol.Kind) *symbol.Symbol {
+func baseSym(name, impPath string, kind symbol.Kind) *symbol.Symbol { // nolint:unparam
 	return &symbol.Symbol{
 		Name:       name,
 		ImportPath: impPath,
@@ -32,7 +32,7 @@ func TestFilterSymbolsDedup(t *testing.T) {
 		baseSym("Println", "fmt", symbol.FunctionKind),
 		baseSym("Println", "fmt", symbol.FunctionKind),
 	}
-	got := filterSymbols(syms, defaultOpts(), "", nil)
+	got := filterSymbols(syms, defaultOpts(), "", nil, nil)
 	if len(got) != 1 {
 		t.Fatalf("expected 1 after dedup, got %d", len(got))
 	}
@@ -41,7 +41,7 @@ func TestFilterSymbolsDedup(t *testing.T) {
 func TestFilterSymbolsSameFileExcluded(t *testing.T) {
 	s := baseSym("Println", "fmt", symbol.FunctionKind)
 	s.Location.Path = "/proj/main.go"
-	got := filterSymbols([]*symbol.Symbol{s}, defaultOpts(), "/proj/main.go", nil)
+	got := filterSymbols([]*symbol.Symbol{s}, defaultOpts(), "/proj/main.go", nil, nil)
 	if len(got) != 0 {
 		t.Fatal("symbol from same file should be excluded")
 	}
@@ -56,7 +56,7 @@ func TestFilterSymbolsMaxPerPackage(t *testing.T) {
 		baseSym("C", "fmt", symbol.FunctionKind),
 		baseSym("D", "log", symbol.FunctionKind),
 	}
-	got := filterSymbols(syms, opts, "", nil)
+	got := filterSymbols(syms, opts, "", nil, nil)
 	if len(got) != 3 {
 		t.Fatalf("expected 3 (2 from fmt + 1 from log), got %d", len(got))
 	}
@@ -70,7 +70,7 @@ func TestFilterSymbolsExcludeImported(t *testing.T) {
 		baseSym("Print", "log", symbol.FunctionKind),
 	}
 	imported := map[string]string{"fmt": "fmt"}
-	got := filterSymbols(syms, opts, "", imported)
+	got := filterSymbols(syms, opts, "", imported, nil)
 	if len(got) != 1 {
 		t.Fatalf("expected 1 (fmt excluded), got %d", len(got))
 	}
@@ -84,7 +84,7 @@ func TestFilterSymbolsExcludeTestFiles(t *testing.T) {
 	opts.ExcludeTestFiles = true
 	s := baseSym("TestFoo", "fmt", symbol.FunctionKind)
 	s.Location.Path = "/proj/fmt/foo_test.go"
-	got := filterSymbols([]*symbol.Symbol{s}, opts, "", nil)
+	got := filterSymbols([]*symbol.Symbol{s}, opts, "", nil, nil)
 	if len(got) != 0 {
 		t.Fatal("test file symbol should be excluded")
 	}
@@ -95,7 +95,7 @@ func TestFilterSymbolsExcludeVendored(t *testing.T) {
 	opts.ExcludeVendored = true
 	s := baseSym("Foo", "vendor/pkg", symbol.FunctionKind)
 	s.IsVendored = true
-	got := filterSymbols([]*symbol.Symbol{s}, opts, "", nil)
+	got := filterSymbols([]*symbol.Symbol{s}, opts, "", nil, nil)
 	if len(got) != 0 {
 		t.Fatal("vendored symbol should be excluded")
 	}
@@ -125,7 +125,7 @@ func TestBuildWithNoOptions(t *testing.T) {
 		baseSym("Println", "fmt", symbol.FunctionKind),
 	}
 	req := Request{Prefix: "pri", Options: nil}
-	items := Build(req, syms)
+	items := Build(req, nil, syms)
 	if len(items) != 0 {
 		t.Fatalf("Build with nil options (MaxItems=0) should return no items, got %d", len(items))
 	}

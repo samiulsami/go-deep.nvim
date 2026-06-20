@@ -38,19 +38,21 @@ type CompletionItem struct {
 	UserData string `msgpack:"user_data"`
 }
 
-func Build(req Request, lists ...[]*symbol.Symbol) []CompletionItem {
+func Build(req Request, seenHashes map[string]struct{}, lists ...[]*symbol.Symbol) []CompletionItem {
 	var opts ProcessOptions
 	if req.Options != nil {
 		opts = *req.Options
 	}
 
 	ranked := score.Match(score.RankOpts{Query: req.Prefix, Limit: opts.MaxItems}, lists...)
-	filtered := filterSymbols(ranked, opts, req.Filepath, req.ImportedPaths)
+	filtered := filterSymbols(ranked, opts, req.Filepath, req.ImportedPaths, seenHashes)
 	return buildItems(req, filtered)
 }
 
-func filterSymbols(symbols []*symbol.Symbol, opts ProcessOptions, bufPath string, importedPaths map[string]string) []*symbol.Symbol {
-	seen := make(map[string]bool)
+func filterSymbols(symbols []*symbol.Symbol, opts ProcessOptions, bufPath string, importedPaths map[string]string, seen map[string]struct{}) []*symbol.Symbol {
+	if seen == nil {
+		seen = make(map[string]struct{})
+	}
 	pkgCounts := make(map[string]int)
 	matched := make([]*symbol.Symbol, 0)
 	for _, s := range symbols {
@@ -75,13 +77,13 @@ func filterSymbols(symbols []*symbol.Symbol, opts ProcessOptions, bufPath string
 			}
 		}
 		hash := symbol.Hash(s)
-		if seen[hash] {
+		if _, ok := seen[hash]; ok {
 			continue
 		}
 		if opts.MaxFromSamePackage > 0 && pkgCounts[s.ImportPath] >= opts.MaxFromSamePackage {
 			continue
 		}
-		seen[hash] = true
+		seen[hash] = struct{}{}
 		pkgCounts[s.ImportPath]++
 		matched = append(matched, s)
 	}

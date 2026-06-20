@@ -4,7 +4,7 @@ local utils = {}
 ---@param prefix string
 ---@return boolean
 function utils.valid_prefix(prefix)
-	return prefix ~= "" and not prefix:match("[%.]") and not prefix:match("[^%w_]")
+	return prefix ~= "" and not prefix:match("[^%w_]")
 end
 
 ---@param prefix string

@@ -25,13 +25,11 @@ const (
 )
 
 type stdPackage struct {
-	ImportPath   string
-	Name         string
-	Dir          string
-	GoFiles      []string
-	CgoFiles     []string
-	TestGoFiles  []string
-	XTestGoFiles []string
+	ImportPath string
+	Name       string
+	Dir        string
+	GoFiles    []string
+	CgoFiles   []string
 }
 
 func crawlStdlib(ctx context.Context) ([]*symbol.Symbol, error) {
@@ -177,22 +175,24 @@ func crawlFile(fset *token.FileSet, pkg stdPackage, name string) ([]*symbol.Symb
 	return out, nil
 }
 
+func posToRange(pos token.Pos, fset *token.FileSet) symbol.Range {
+	p := fset.Position(pos)
+	n := symbol.Position{Line: p.Line - 1, Character: p.Column - 1}
+	return symbol.Range{Start: n, End: n}
+}
+
 func collectFuncSymbol(d *ast.FuncDecl, fset *token.FileSet, pkg stdPackage, path string) *symbol.Symbol {
 	if d.Recv != nil || !d.Name.IsExported() {
 		return nil
 	}
-	pos := fset.Position(d.Name.Pos())
 	sym := &symbol.Symbol{
 		Name:        d.Name.Name,
 		ImportPath:  pkg.ImportPath,
 		PackageName: pkg.Name,
 		Kind:        symbol.FunctionKind,
 		Location: symbol.Location{
-			Path: path,
-			Range: symbol.Range{
-				Start: symbol.Position{Line: pos.Line - 1, Character: pos.Column - 1},
-				End:   symbol.Position{Line: pos.Line - 1, Character: pos.Column - 1},
-			},
+			Path:  path,
+			Range: posToRange(d.Name.Pos(), fset),
 		},
 	}
 	sym.Haystack = symbol.BuildHaystack(sym)
@@ -218,18 +218,14 @@ func collectTypeSpecSymbol(s *ast.TypeSpec, fset *token.FileSet, pkg stdPackage,
 	if !s.Name.IsExported() {
 		return nil
 	}
-	pos := fset.Position(s.Name.Pos())
 	sym := &symbol.Symbol{
 		Name:        s.Name.Name,
 		ImportPath:  pkg.ImportPath,
 		PackageName: pkg.Name,
 		Kind:        typeSpecKind(s),
 		Location: symbol.Location{
-			Path: path,
-			Range: symbol.Range{
-				Start: symbol.Position{Line: pos.Line - 1, Character: pos.Column - 1},
-				End:   symbol.Position{Line: pos.Line - 1, Character: pos.Column - 1},
-			},
+			Path:  path,
+			Range: posToRange(s.Name.Pos(), fset),
 		},
 	}
 	sym.Haystack = symbol.BuildHaystack(sym)
@@ -246,18 +242,14 @@ func collectValueSpecSymbols(s *ast.ValueSpec, fset *token.FileSet, pkg stdPacka
 		if !name.IsExported() {
 			continue
 		}
-		pos := fset.Position(name.Pos())
 		sym := &symbol.Symbol{
 			Name:        name.Name,
 			ImportPath:  pkg.ImportPath,
 			PackageName: pkg.Name,
 			Kind:        kind,
 			Location: symbol.Location{
-				Path: path,
-				Range: symbol.Range{
-					Start: symbol.Position{Line: pos.Line - 1, Character: pos.Column - 1},
-					End:   symbol.Position{Line: pos.Line - 1, Character: pos.Column - 1},
-				},
+				Path:  path,
+				Range: posToRange(name.Pos(), fset),
 			},
 		}
 		sym.Haystack = symbol.BuildHaystack(sym)

@@ -7,7 +7,7 @@ local client = require("go_deep.client")
 local M = {}
 
 local module_path = debug.getinfo(1, "S").source:sub(2)
-local backend_build_version = "v0.0.10"
+local backend_build_version = "v0.0.12"
 
 M.plugin_root = vim.fn.fnamemodify(
 	vim.api.nvim_get_runtime_file("lua/go_deep/init.lua", false)[1] or module_path,
@@ -85,9 +85,7 @@ function M.build(path)
 	out = out:gsub("\n$", "")
 
 	if exit_code == 0 then
-		if stamp_path then
-			vim.fn.writefile({ backend_build_version }, stamp_path)
-		end
+		vim.fn.writefile({ backend_build_version }, stamp_path)
 		vim.notify("[go-deep] backend built successfully", vim.log.levels.INFO)
 	else
 		vim.notify("[go-deep] build failed (exit " .. exit_code .. ")\n" .. out, vim.log.levels.ERROR)

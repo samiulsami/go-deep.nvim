@@ -16,6 +16,7 @@ local M = {}
 ---@class go_deep.client.Reply
 ---@field public request_id integer
 ---@field public items table[]
+---@field public final boolean
 
 ---@type go_deep.client.State
 local state = {
@@ -51,6 +52,7 @@ function M.stop()
 	end
 	state.job_id = nil
 	state.channel = nil
+	fail_pending("backend stopped")
 	pcall(vim.fn.jobstop, job_id)
 end
 
@@ -61,7 +63,7 @@ function M.start(binary, opts)
 		return
 	end
 
-		local ok, result = pcall(function()
+	local ok, result = pcall(function()
 		return vim.fn.jobstart({
 			binary,
 			"serve",
@@ -168,9 +170,6 @@ end
 ---@return fun()
 function M.complete(bufnr, prefix, opts, handlers)
 	local imported_paths = treesitter.get_imported_paths(bufnr)
-	if vim.tbl_isempty(imported_paths) then
-		imported_paths = vim.empty_dict()
-	end
 
 	local req = {
 		prefix = prefix,
@@ -200,7 +199,6 @@ function M._dispatch(reply)
 	end
 
 	local pending = state.pending[reply.request_id]
-	state.pending[reply.request_id] = nil
 	if not pending then
 		return
 	end
@@ -208,11 +206,27 @@ function M._dispatch(reply)
 	if pending.on_items then
 		pending.on_items(reply)
 	end
+	if reply.final then
+		state.pending[reply.request_id] = nil
+	end
 end
 
 vim.api.nvim_create_autocmd("VimLeavePre", {
 	group = vim.api.nvim_create_augroup("go_deep_client", { clear = true }),
 	callback = M.stop,
 })
+
+---@return table | nil status
+---@return string | nil error
+function M.status()
+	if not state.channel then
+		return nil, "backend not running"
+	end
+	local ok, result = pcall(vim.rpcrequest, state.channel, "status")
+	if not ok then
+		return nil, tostring(result)
+	end
+	return result
+end
 
 return M

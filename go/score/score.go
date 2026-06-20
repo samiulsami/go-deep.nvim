@@ -111,16 +111,7 @@ func Score(query, haystack string) int {
 	score -= firstMatch
 	score -= len(haystack) - lastMatch - 1
 	if len(query) == len(haystack) {
-		eq := true
-		for i := 0; i < len(query); i++ {
-			if foldTable[query[i]] != foldTable[haystack[i]] {
-				eq = false
-				break
-			}
-		}
-		if eq {
-			score += scoreExact
-		}
+		score += scoreExact
 	}
 
 	if score < 1 {

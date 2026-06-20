@@ -143,7 +143,7 @@ function treesitter.get_imported_paths(bufnr)
 			end
 
 			if type == "import_spec_list" then
-				for k = 0, child:child_count() - 1 do
+				for k = 0, child:named_child_count() - 1 do
 					process_import_spec(child:named_child(k))
 				end
 				break

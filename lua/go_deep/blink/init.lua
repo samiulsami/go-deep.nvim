@@ -7,7 +7,6 @@ local go_deep = require("go_deep")
 local completionItemKind = vim.lsp.protocol.CompletionItemKind
 local lsp_kind_map = {
 	t = completionItemKind.Class,
-	e = completionItemKind.Enum,
 	i = completionItemKind.Interface,
 	f = completionItemKind.Function,
 	v = completionItemKind.Variable,
@@ -72,27 +71,31 @@ function Source:enabled(ctx)
 end
 
 function Source:get_completions(ctx, callback)
-	if not client.has_gopls(ctx.bufnr) then
-		callback(empty_response)
-		return function() end
-	end
 	local opts = go_deep.resolve_request_config(self.opts)
 	if not opts then
 		callback(empty_response)
 		return function() end
 	end
-	local prefix = extract_prefix(ctx)
-	if not prefix or not utils.is_valid_query(prefix, opts.min_keyword_length) then
+	if not opts.workspace_symbols and not opts.stdlib_symbols then
 		callback(empty_response)
 		return function() end
 	end
-
+	if opts.workspace_symbols and not client.has_gopls(ctx.bufnr) then
+		callback(empty_response)
+		return function() end
+	end
 	if not client.is_running() then
 		backend.ensure(go_deep.resolve_config())
 		if not client.is_running() then
 			callback(empty_response)
 			return function() end
 		end
+	end
+
+	local prefix = extract_prefix(ctx)
+	if not prefix or not utils.is_valid_query(prefix, opts.min_keyword_length) then
+		callback(empty_response)
+		return function() end
 	end
 
 	local ok, cancel = client.complete(ctx.bufnr, prefix, opts, {

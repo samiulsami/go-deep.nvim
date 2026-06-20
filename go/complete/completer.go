@@ -1,7 +1,6 @@
 package complete
 
 import (
-	"path/filepath"
 	"strings"
 
 	"github.com/samiulsami/go-deep.nvim/go/score"
@@ -40,15 +39,7 @@ type CompletionItem struct {
 }
 
 func Build(req Request, lists ...[]*symbol.Symbol) []CompletionItem {
-	opts := ProcessOptions{
-		MaxItems:           30,
-		MaxFromSamePackage: 4,
-		WorkspaceSymbols:   true,
-		StdlibSymbols:      true,
-		ExcludeImported:    true,
-		ExcludeInternal:    true,
-		ExcludeTestFiles:   true,
-	}
+	var opts ProcessOptions
 	if req.Options != nil {
 		opts = *req.Options
 	}
@@ -69,7 +60,7 @@ func filterSymbols(symbols []*symbol.Symbol, opts ProcessOptions, bufPath string
 		if opts.ExcludeImported && importedPaths[s.ImportPath] != "" {
 			continue
 		}
-		if s.Location.Path == bufPath || (s.Location.Path != "" && bufPath != "" && filepath.Base(s.Location.Path) == filepath.Base(bufPath)) {
+		if s.Location.Path == bufPath {
 			continue
 		}
 		if opts.ExcludeTestFiles && strings.HasSuffix(s.Location.Path, "_test.go") {

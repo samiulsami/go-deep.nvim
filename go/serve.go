@@ -36,6 +36,13 @@ type serveConfig struct {
 type replyPayload struct {
 	RequestID uint64                    `msgpack:"request_id"`
 	Items     []complete.CompletionItem `msgpack:"items"`
+	Final     bool                      `msgpack:"final"`
+}
+
+type statusPayload struct {
+	IndexReady    bool `msgpack:"index_ready"`
+	IndexBuilding bool `msgpack:"index_building"`
+	IndexSymbols  int  `msgpack:"index_symbols"`
 }
 
 type serveHandler struct {
@@ -51,7 +58,6 @@ type serveHandler struct {
 func defaultServeConfig() serveConfig {
 	return serveConfig{
 		Index:              true,
-		IndexFilePath:      "",
 		MaxItems:           30,
 		MaxFromSamePackage: 4,
 		WorkspaceTimeout:   15,
@@ -113,9 +119,13 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 		return err
 	}
 
-	goplsManager, err := gopls.NewManager(ctx, cwd)
-	if err != nil {
-		return fmt.Errorf("workspace client: %w", err)
+	var goplsManager *gopls.Manager
+	if cfg.WorkspaceSymbols {
+		mgr, err := gopls.NewManager(ctx, cwd)
+		if err != nil {
+			return fmt.Errorf("workspace client: %w", err)
+		}
+		goplsManager = mgr
 	}
 
 	var stdlibIndex *index.Index
@@ -150,75 +160,93 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	return h.serve(endpoint)
 }
 
-func (h *serveHandler) serve(e *rpc.Endpoint) error {
-	if err := e.Register("symbols", func(e *rpc.Endpoint, req complete.Request) {
-		go h.handleSymbols(e, req)
-	}, e); err != nil {
+func (handler *serveHandler) serve(endpoint *rpc.Endpoint) error {
+	if err := endpoint.Register("symbols", func(e *rpc.Endpoint, req complete.Request) {
+		go handler.handleSymbols(e, req)
+	}, endpoint); err != nil {
+		return err
+	}
+	if err := endpoint.Register("status", func(e *rpc.Endpoint) (statusPayload, error) {
+		return handler.handleStatus(), nil
+	}, endpoint); err != nil {
 		return err
 	}
 	log.Printf("rpc server ready, awaiting requests")
-	return e.Serve()
+	return endpoint.Serve()
 }
 
-func (h *serveHandler) handleSymbols(e *rpc.Endpoint, req complete.Request) {
-	id := h.reqID.Add(1)
+func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.Request) {
+	id := handler.reqID.Add(1)
 	log.Printf("[%d] symbols: prefix=%q file=%s cwd=%s",
 		id, req.Prefix, req.Filepath, req.CWD)
 
-	effectiveOpts := h.options
+	effectiveOpts := handler.options
 	if req.Options != nil {
 		effectiveOpts = *req.Options
 	}
 
-	h.fetchPool.Submit(
-		func() {
-			fetchCtx, cancel := context.WithTimeout(h.ctx, time.Duration(h.cfg.WorkspaceTimeout)*time.Second)
-			defer cancel()
-			requestID := req.RequestID
-			rpcEndpoint := e
+	buildReq := complete.Request{
+		RequestID:     req.RequestID,
+		Prefix:        req.Prefix,
+		Filepath:      req.Filepath,
+		CWD:           req.CWD,
+		ImportedPaths: req.ImportedPaths,
+		Options:       &effectiveOpts,
+	}
 
-			var wsSymbols []*symbol.Symbol
-			if effectiveOpts.WorkspaceSymbols {
-				rawWs, err := h.goplsManager.WorkspaceSymbol(fetchCtx, req.CWD, req.Prefix)
-				if err != nil {
-					log.Printf("[%d] workspace symbols: %v", id, err)
-					return
-				}
-				wsSymbols = make([]*symbol.Symbol, 0, len(rawWs))
-				for _, raw := range rawWs {
-					if sym, ok := gopls.ConvertLSPSymbolToSymbol(raw, req.CWD); ok {
-						wsSymbols = append(wsSymbols, sym)
-					}
-				}
-			}
+	workspaceEnabled := effectiveOpts.WorkspaceSymbols && handler.goplsManager != nil
 
-			var stdlibSymbols []*symbol.Symbol
-			if effectiveOpts.StdlibSymbols && h.stdlibIndex != nil {
-				stdlibSymbols = h.stdlibIndex.Symbols()
+	if effectiveOpts.StdlibSymbols && handler.stdlibIndex != nil {
+		if stdlibSymbols := handler.stdlibIndex.Symbols(); len(stdlibSymbols) > 0 {
+			if items := complete.Build(buildReq, stdlibSymbols); len(items) > 0 {
+				log.Printf("[%d] stdlib: %d items", id, len(items))
+				handler.sendSymbols(id, endpoint, req.RequestID, items, !workspaceEnabled)
 			}
+		}
+	}
 
-			items := complete.Build(
-				complete.Request{
-					RequestID:     requestID,
-					Prefix:        req.Prefix,
-					Filepath:      req.Filepath,
-					CWD:           req.CWD,
-					ImportedPaths: req.ImportedPaths,
-					Options:       &effectiveOpts,
-				},
-				wsSymbols,
-				stdlibSymbols,
-			)
-			if len(items) > 0 {
-				log.Printf("[%d] built: %d items", requestID, len(items))
-				h.sendSymbols(id, rpcEndpoint, requestID, items)
+	if !workspaceEnabled {
+		if effectiveOpts.StdlibSymbols && handler.stdlibIndex != nil {
+			return
+		}
+		handler.sendSymbols(id, endpoint, req.RequestID, nil, true)
+		return
+	}
+
+	handler.fetchPool.Submit(func() {
+		fetchCtx, cancel := context.WithTimeout(handler.ctx, time.Duration(handler.cfg.WorkspaceTimeout)*time.Second)
+		defer cancel()
+
+		rawWs, err := handler.goplsManager.WorkspaceSymbol(fetchCtx, req.CWD, req.Prefix)
+		if err != nil {
+			log.Printf("[%d] workspace symbols: %v", id, err)
+			handler.sendSymbols(id, endpoint, req.RequestID, nil, true)
+			return
+		}
+		wsSymbols := make([]*symbol.Symbol, 0, len(rawWs))
+		for _, raw := range rawWs {
+			if sym, ok := gopls.ConvertLSPSymbolToSymbol(raw, req.CWD); ok {
+				wsSymbols = append(wsSymbols, sym)
 			}
-		},
-	)
+		}
+		items := complete.Build(buildReq, wsSymbols)
+		log.Printf("[%d] workspace: %d items", id, len(items))
+		handler.sendSymbols(id, endpoint, req.RequestID, items, true)
+	})
 }
 
-func (h *serveHandler) sendSymbols(id uint64, e *rpc.Endpoint, requestID uint64, items []complete.CompletionItem) {
-	reply := replyPayload{RequestID: requestID, Items: items}
+func (handler *serveHandler) handleStatus() statusPayload {
+	p := statusPayload{}
+	if handler.stdlibIndex != nil {
+		p.IndexReady = handler.stdlibIndex.Ready()
+		p.IndexBuilding = handler.stdlibIndex.Building()
+		p.IndexSymbols = handler.stdlibIndex.SymbolCount()
+	}
+	return p
+}
+
+func (handler *serveHandler) sendSymbols(id uint64, e *rpc.Endpoint, requestID uint64, items []complete.CompletionItem, final bool) {
+	reply := replyPayload{RequestID: requestID, Items: items, Final: final}
 	if err := e.Call("nvim_call_function", nil, "luaeval", []any{"require('go_deep.client')._dispatch(_A[1])", []any{reply}}); err != nil {
 		log.Printf("[%d] dispatch call failed: %v", id, err)
 	}

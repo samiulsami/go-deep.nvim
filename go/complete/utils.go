@@ -70,7 +70,7 @@ func resolvePackageAlias(s *symbol.Symbol, importedPaths map[string]string, pack
 		return alias
 	}
 
-	for i := 1; i <= 100; i++ {
+	for i := 1; i <= 10; i++ {
 		candidate := fmt.Sprintf("%s%d", alias, i)
 		if !packageNameConflict(candidate, importedPaths) {
 			return candidate
@@ -123,7 +123,7 @@ func canImportInternal(importingFile, targetFile string) bool {
 }
 
 func packageNameConflict(alias string, importedPaths map[string]string) bool {
-	if len(alias) == 1 && (strings.HasPrefix(alias, "_") || strings.HasPrefix(alias, ".")) {
+	if alias == "_" {
 		return false
 	}
 	for _, v := range importedPaths {
@@ -156,27 +156,12 @@ type userDataPosition struct {
 }
 
 func parseDocumentationBeforeLine(path string, startLine int) string {
-	lines := readDocumentationLines(path)
-	if len(lines) == 0 {
+	if startLine <= 1 {
 		return ""
 	}
-
-	if startLine < 0 || startLine > len(lines) {
-		return ""
-	}
-	if docs := scanLineDocs(lines, startLine-1); docs != "" {
-		return docs
-	}
-	if startLine > 0 {
-		return scanLineDocs(lines, startLine-2)
-	}
-	return ""
-}
-
-func readDocumentationLines(path string) []string {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil
+		return ""
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
@@ -184,35 +169,43 @@ func readDocumentationLines(path string) []string {
 		}
 	}()
 
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	if err := scanner.Err(); err != nil {
-		log.Printf("error reading file: %v", err)
-	}
-	return lines
-}
+	var comments []string
+	blankLinesCount := 0
 
-func scanLineDocs(lines []string, i int) string {
-	if i < 0 || i >= len(lines) {
-		return ""
-	}
-	var docs []string
-	for ; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
+	scanner := bufio.NewScanner(file)
+	for i := 1; i < startLine; i++ {
+		if !scanner.Scan() {
 			break
+		}
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			blankLinesCount++
+			continue
 		}
 		comment, ok := strings.CutPrefix(line, "//")
-		if !ok {
-			break
+		if ok {
+			if blankLinesCount > 0 {
+				comments = []string{strings.TrimSpace(comment)}
+				blankLinesCount = 0
+			} else {
+				comments = append(comments, strings.TrimSpace(comment))
+			}
+		} else {
+			comments = nil
+			blankLinesCount = 0
 		}
-		docs = append([]string{strings.TrimSpace(comment)}, docs...)
 	}
-	if len(docs) == 0 {
+	if err := scanner.Err(); err != nil {
+		log.Printf("error reading file %s: %v", path, err)
+	}
+
+	if blankLinesCount > 0 {
 		return ""
 	}
-	return "```go\n" + strings.Join(docs, "\n") + "\n```"
+
+	if len(comments) == 0 {
+		return ""
+	}
+
+	return "```go\n" + strings.Join(comments, "\n") + "\n```"
 }

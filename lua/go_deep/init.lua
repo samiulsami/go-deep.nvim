@@ -3,7 +3,6 @@ local native = require("go_deep.native")
 
 ---@class go_deep.Config
 ---@field notifications boolean show notifications. default: true
----@field cache boolean cache project symbols. default: true
 ---@field index boolean use persisted stdlib index. default: true
 ---@field index_file_path string stdlib index path. default: vim.fn.stdpath("data") .. "/go_deep/go_deep.gob"
 ---@field min_keyword_length integer minimum prefix length. default: 3
@@ -23,7 +22,6 @@ local M = {}
 ---@type go_deep.Config
 M.defaults = {
 	notifications = true,
-	cache = true,
 	index = true,
 	index_file_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
 	min_keyword_length = 3,
@@ -63,9 +61,6 @@ local function validate_opts(opts, path, allow_notifications)
 		elseif type(opts.notifications) ~= "boolean" then
 			errors[#errors + 1] = path .. ".notifications must be a boolean"
 		end
-	end
-	if opts.cache ~= nil and type(opts.cache) ~= "boolean" then
-		errors[#errors + 1] = path .. ".cache must be a boolean"
 	end
 	if opts.index ~= nil and type(opts.index) ~= "boolean" then
 		errors[#errors + 1] = path .. ".index must be a boolean"
@@ -158,6 +153,16 @@ end
 ---@param bufnr integer
 function M.attach_to_buffer(bufnr)
 	native.attach(bufnr, M.resolve_config())
+end
+
+---@return table | nil status
+---@return string | nil error
+function M.status()
+	local client = require("go_deep.client")
+	if not client.is_running() then
+		return nil, "backend not running"
+	end
+	return client.status()
 end
 
 return M

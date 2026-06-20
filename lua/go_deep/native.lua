@@ -12,7 +12,7 @@ local M = {}
 local state = {
 	start_col = {},
 	current = {},
-	refreshing = {},
+	cancel = {},
 	config = {},
 }
 
@@ -34,6 +34,10 @@ end
 local function clear(bufnr)
 	state.current[bufnr] = nil
 	state.start_col[bufnr] = nil
+	if state.cancel[bufnr] then
+		state.cancel[bufnr]()
+		state.cancel[bufnr] = nil
+	end
 end
 
 ---@param bufnr integer
@@ -76,7 +80,6 @@ local function apply_completion(ctx, items)
 		if state.current[ctx.bufnr] ~= ctx or not context_matches(ctx) then
 			return
 		end
-		state.refreshing[ctx.bufnr] = true
 
 		-- merge with existing pum items (lsp, keywords, etc.)
 		local merged = {}
@@ -93,9 +96,6 @@ local function apply_completion(ctx, items)
 		end
 
 		vim.fn.complete(ctx.start_col + 1, merged)
-		vim.schedule(function()
-			state.refreshing[ctx.bufnr] = nil
-		end)
 	end)
 end
 
@@ -106,7 +106,11 @@ end
 local function complete(bufnr, prefix, start_col, opts)
 	local ctx = new_context(bufnr, prefix, start_col)
 	state.current[bufnr] = ctx
-	client.complete(bufnr, prefix, opts, {
+	if state.cancel[bufnr] then
+		state.cancel[bufnr]()
+		state.cancel[bufnr] = nil
+	end
+	local ok, cancel = client.complete(bufnr, prefix, opts, {
 		on_items = function(reply)
 			if state.current[bufnr] ~= ctx then
 				return
@@ -114,6 +118,9 @@ local function complete(bufnr, prefix, start_col, opts)
 			apply_completion(ctx, reply.items)
 		end,
 	})
+	if ok then
+		state.cancel[bufnr] = cancel
+	end
 end
 
 ---@param findstart integer
@@ -128,11 +135,14 @@ function M.completefunc(findstart, base)
 		state.start_col[bufnr] = start_col
 		return start_col
 	end
-	if not client.has_gopls(bufnr) then
+	local opts = buf_config
+	if not opts then
 		return { words = {}, refresh = "always" }
 	end
-	local opts = go_deep.resolve_request_config(nil, buf_config)
-	if not opts then
+	if not opts.workspace_symbols and not opts.stdlib_symbols then
+		return { words = {}, refresh = "always" }
+	end
+	if opts.workspace_symbols and not client.has_gopls(bufnr) then
 		return { words = {}, refresh = "always" }
 	end
 
@@ -200,11 +210,11 @@ function M.attach(bufnr, user_opts)
 	})
 
 	local on_text_changed = function(was_pum_visible, selected)
-		if not client.has_gopls(bufnr) then
+		local opts = state.config[bufnr]
+		if not opts then
 			return
 		end
-		local opts = go_deep.resolve_request_config(nil, state.config[bufnr])
-		if not opts then
+		if opts.workspace_symbols and not client.has_gopls(bufnr) then
 			return
 		end
 		local prefix, start_col = utils.cursor_prefix()

@@ -1,9 +1,9 @@
 package symbol
 
 import (
-	"fmt"
 	"go/parser"
 	"go/token"
+	"strconv"
 )
 
 const nullByte = "\x00"
@@ -101,5 +101,5 @@ func Hash(sym *Symbol) string {
 	if sym == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s#%d#%s", sym.Name, sym.Kind, sym.ImportPath)
+	return sym.Name + "#" + strconv.Itoa(int(sym.Kind)) + "#" + sym.ImportPath
 }

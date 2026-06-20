@@ -19,7 +19,7 @@ How?
 
 Query `gopls's` `workspace/symbol` endpoint, keep project symbols in memory,
 build a persisted stdlib index, convert the resulting `SymbolInformation` into
-`completionItemKinds`, filter the resuls then feed them back into native
+`completionItemKinds`, filter the results then feed them back into native
 completion / `blink.cmp`
 
 ==============================================================================
@@ -73,7 +73,6 @@ vim.pack + native completion: >
     vim.opt.completeopt = { "menu", "menuone", "popup", "noselect", "fuzzy" }
     vim.opt.complete = { "o", ".", "w", "b", "u", "t" }
     vim.opt.omnifunc = "v:lua.vim.lsp.omnifunc"
-    vim.opt.autocomplete = true
 <
 
 vim.pack + blink.cmp: >
@@ -157,7 +156,6 @@ Native completion recommended settings: >
     vim.opt.completeopt = { "menu", "menuone", "popup", "noselect", "fuzzy" }
     vim.opt.complete = { "o", ".", "w", "b", "u", "t" }
     vim.opt.omnifunc = "v:lua.vim.lsp.omnifunc"
-    vim.opt.autocomplete = true
 <
 
 
@@ -175,12 +173,15 @@ Options are set via `vim.g.go_deep`: >
         index = true,
         index_file_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
         workspace_timeout = 15,
+        workspace_symbols = true,
+        stdlib_symbols = true,
         max_items = 30,
         max_from_same_package = 4,
         exclude_imported_packages = true,
         exclude_vendored_packages = false,
         exclude_internal_packages = true,
         exclude_test_files = true,
+        completion_cache = true,
     }
 <
 
@@ -219,16 +220,20 @@ overrides affect only request-local settings:
 - `min_keyword_length`
 - `max_items`
 - `max_from_same_package`
+- `workspace_symbols`
+- `stdlib_symbols`
 - `exclude_imported_packages`
 - `exclude_vendored_packages`
 - `exclude_internal_packages`
 - `exclude_test_files`
 
 Shared backend startup settings still come from `vim.g.go_deep` because one
-long-lived backend process is shared across requests.
+long-lived backend process is shared across requests:
 
-`workspace_timeout` is a backend startup configuration option; it is not a
-request-local blink override.
+- `notifications` (Lua-side only)
+- `index`, `index_file_path` (backend startup)
+- `workspace_timeout` (backend startup)
+- `completion_cache` (backend startup)
 
 Do not use native go-deep and blink go-deep in the same buffer. Choose one
 frontend per buffer.
@@ -246,9 +251,17 @@ frontend per buffer.
         Path to the gob-backed stdlib index file.
         Default: `vim.fn.stdpath("data") .. "/go_deep/go_deep.gob"`.
 
-                                                 *go_deep-option-max_items*
+                                                  *go_deep-option-max_items*
     `max_items`                                 (integer, default: 30)
         Maximum number of completion items returned.
+
+                                       *go_deep-option-workspace_symbols*
+    `workspace_symbols`                         (boolean, default: true)
+        Include workspace symbols from `gopls` `workspace/symbol`.
+
+                                         *go_deep-option-stdlib_symbols*
+    `stdlib_symbols`                            (boolean, default: true)
+        Include indexed stdlib symbols.
 
                                        *go_deep-option-max_from_same_package*
     `max_from_same_package`                        (integer, default: 4)
@@ -270,6 +283,13 @@ frontend per buffer.
                                         *go_deep-option-exclude_test_files*
     `exclude_test_files`                        (boolean, default: true)
         Exclude symbols from `*_test.go` files.
+
+                                         *go_deep-option-completion_cache*
+    `completion_cache`                          (boolean, default: true)
+        Cache `gopls` workspace/symbol results in-memory to prevent stutter
+        on repeat queries. On a miss, falls back to progressively shorter
+        prefixes (down to 3 chars) to reuse superset results. Only active
+        when `workspace_symbols` is also true.
 
                                             *go_deep-option-notifications*
     `notifications`                             (boolean, default: true)
@@ -306,10 +326,13 @@ Common flags: >
     --max-items int
     --max-from-same-package int
     --workspace-timeout int
+    --workspace-symbols
+    --stdlib-symbols
     --exclude-imported
     --exclude-vendored
     --exclude-internal
     --exclude-test-files
+    --completion-cache
 <
 
 The backend requires a working `gopls` installation on `PATH`. If gopls cannot

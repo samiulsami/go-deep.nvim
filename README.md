@@ -12,6 +12,8 @@ Build a stdlib index upon first startup, query ```gopls's``` ```workspace/symbol
 
 ---
 
+[Demo video](demo/go-deep-demo.mp4)
+
 ⚠️ <i> First startup may stutter while the stdlib index is being built </i>
 
 ## Requirements
@@ -66,7 +68,6 @@ vim.api.nvim_create_autocmd("LspAttach", {
 vim.opt.completeopt = { "menu", "menuone", "popup", "noselect", "fuzzy" }
 vim.opt.complete = { "o", ".", "w", "b", "u", "t" }
 vim.opt.omnifunc = "v:lua.vim.lsp.omnifunc"
-vim.opt.autocomplete = false
 ```
 
 #### vim.pack + blink.cmp
@@ -165,6 +166,8 @@ vim.g.go_deep = {
     index = true,
     index_file_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
     workspace_timeout = 15,
+    workspace_symbols = true,
+    stdlib_symbols = true,
     min_keyword_length = 3,
     max_items = 30,
     max_from_same_package = 4,
@@ -172,6 +175,7 @@ vim.g.go_deep = {
     exclude_vendored_packages = false,
     exclude_internal_packages = true,
     exclude_test_files = true,
+    completion_cache = true,
 }
 ```
 
@@ -184,15 +188,19 @@ These overrides affect only request-local keys:
 - `min_keyword_length`
 - `max_items`
 - `max_from_same_package`
+- `workspace_symbols`
+- `stdlib_symbols`
 - `exclude_imported_packages`
 - `exclude_vendored_packages`
 - `exclude_internal_packages`
 - `exclude_test_files`
 
-Everything else stays global-only in `vim.g.go_deep`.
+Everything else stays global-only in `vim.g.go_deep`:
 
-`workspace_timeout` is a backend startup configuration option; it is not a
-request-local blink override.
+- `notifications` (Lua-side only)
+- `index`, `index_file_path` (backend startup)
+- `workspace_timeout` (backend startup)
+- `completion_cache` (backend startup)
 
 ## blink.cmp
 

@@ -68,7 +68,7 @@ func TestSymCacheLookupFallback(t *testing.T) {
 		t.Fatalf("expected 2 syms from 'NewC' fallback, got %d", len(syms))
 	}
 
-	syms, ok = c.Lookup("NewClientX", cwd)
+	_, ok = c.Lookup("NewClientX", cwd)
 	if !ok {
 		t.Fatal("Lookup should fall back to 'NewC' for 'NewClientX'")
 	}

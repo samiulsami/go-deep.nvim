@@ -117,15 +117,6 @@ func (idx *Index) Symbols() []*symbol.Symbol {
 	return idx.symbols
 }
 
-func (idx *Index) Ready() bool    { return idx.ready.Load() }
-func (idx *Index) Building() bool { return idx.building.Load() }
-
-func (idx *Index) SymbolCount() int {
-	idx.mu.RLock()
-	defer idx.mu.RUnlock()
-	return len(idx.symbols)
-}
-
 func (idx *Index) loadFromCache(cache CacheFile) {
 	idx.mu.Lock()
 	idx.symbols = make([]*symbol.Symbol, len(cache.Symbols))

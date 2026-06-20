@@ -160,14 +160,4 @@ function M.attach_to_buffer(bufnr)
 	native.attach(bufnr, M.resolve_config())
 end
 
----@return table | nil status
----@return string | nil error
-function M.status()
-	local client = require("go_deep.client")
-	if not client.is_running() then
-		return nil, "backend not running"
-	end
-	return client.status()
-end
-
 return M

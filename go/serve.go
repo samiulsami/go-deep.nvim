@@ -40,12 +40,6 @@ type replyPayload struct {
 	Final     bool                      `msgpack:"final"`
 }
 
-type statusPayload struct {
-	IndexReady    bool `msgpack:"index_ready"`
-	IndexBuilding bool `msgpack:"index_building"`
-	IndexSymbols  int  `msgpack:"index_symbols"`
-}
-
 type serveHandler struct {
 	ctx          context.Context
 	cfg          serveConfig
@@ -176,11 +170,6 @@ func (handler *serveHandler) serve(endpoint *rpc.Endpoint) error {
 	}, endpoint); err != nil {
 		return err
 	}
-	if err := endpoint.Register("status", func(e *rpc.Endpoint) (statusPayload, error) {
-		return handler.handleStatus(), nil
-	}, endpoint); err != nil {
-		return err
-	}
 	log.Printf("rpc server ready, awaiting requests")
 	return endpoint.Serve()
 }
@@ -261,16 +250,6 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 		log.Printf("[%d] workspace: %d items", id, len(items))
 		handler.sendSymbols(id, endpoint, req.RequestID, items, true)
 	})
-}
-
-func (handler *serveHandler) handleStatus() statusPayload {
-	p := statusPayload{}
-	if handler.stdlibIndex != nil {
-		p.IndexReady = handler.stdlibIndex.Ready()
-		p.IndexBuilding = handler.stdlibIndex.Building()
-		p.IndexSymbols = handler.stdlibIndex.SymbolCount()
-	}
-	return p
 }
 
 func (handler *serveHandler) sendSymbols(id uint64, e *rpc.Endpoint, requestID uint64, items []complete.CompletionItem, final bool) {

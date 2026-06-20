@@ -217,17 +217,4 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
 	callback = M.stop,
 })
 
----@return table | nil status
----@return string | nil error
-function M.status()
-	if not state.channel then
-		return nil, "backend not running"
-	end
-	local ok, result = pcall(vim.rpcrequest, state.channel, "status")
-	if not ok then
-		return nil, tostring(result)
-	end
-	return result
-end
-
 return M

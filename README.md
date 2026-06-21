@@ -47,10 +47,6 @@ The binary always lives at `bin/go-deep` under the plugin root.
 #### vim.pack + native completion
 
 ```lua
-vim.pack.add({
-    { src = "https://github.com/samiulsami/go-deep.nvim" },
-})
-
 vim.g.go_deep = {
     notifications = true,
     min_keyword_length = 3,
@@ -58,6 +54,22 @@ vim.g.go_deep = {
     max_from_same_package = 4,
     exclude_imported_packages = true,
 }
+
+vim.api.nvim_create_autocmd("PackChanged", {
+    callback = function(ev)
+        if ev.data.spec.name ~= "go-deep.nvim" or (ev.data.kind ~= "install" and ev.data.kind ~= "update") then
+            return
+        end
+        if not ev.data.active then
+            vim.cmd.packadd("go-deep.nvim")
+        end
+        require("go_deep").build(ev.data.path)
+    end,
+})
+
+vim.pack.add({
+    { src = "https://github.com/samiulsami/go-deep.nvim" },
+})
 
 vim.api.nvim_create_autocmd("LspAttach", {
     callback = function(ev)
@@ -73,61 +85,8 @@ vim.opt.complete = { "o", ".", "w", "b", "u", "t" }
 vim.opt.omnifunc = "v:lua.vim.lsp.omnifunc"
 ```
 
-#### vim.pack + blink.cmp
-
-```lua
-vim.pack.add({
-    { src = "https://github.com/saghen/blink.cmp" },
-    { src = "https://github.com/saghen/blink.lib" },
-    { src = "https://github.com/samiulsami/go-deep.nvim" },
-})
-
-require("blink.cmp").setup({
-    sources = {
-        default = { "lsp", "path", "buffer", "go_deep" },
-        providers = {
-            go_deep = {
-                module = "go_deep.blink",
-                async = true,
-                opts = {
-                    min_keyword_length = 2,
-                    max_items = 5,
-                    max_from_same_package = 4,
-                    exclude_imported_packages = true,
-                },
-            },
-        },
-    },
-})
-```
-
 <details>
-<summary>lazy.nvim</summary>
-
-#### lazy.nvim + native completion
-
-```lua
-{
-    "samiulsami/go-deep.nvim",
-    opts = {
-        min_keyword_length = 3,
-        max_items = 30,
-        max_from_same_package = 4,
-        exclude_imported_packages = true,
-    },
-    config = function(_, opts)
-        vim.g.go_deep = opts
-        vim.api.nvim_create_autocmd("LspAttach", {
-            callback = function(ev)
-                local client = vim.lsp.get_client_by_id(ev.data.client_id)
-                if client and client.name == "gopls" then
-                    require("go_deep").attach_to_buffer(ev.buf)
-                end
-            end,
-        })
-    end,
-}
-```
+<summary>lazy.nvim + blink.cmp</summary>
 
 #### lazy.nvim + blink.cmp
 
@@ -137,7 +96,16 @@ require("blink.cmp").setup({
     branch = "main",
     dependencies = {
         { "saghen/blink.lib" },
-        { "samiulsami/go-deep.nvim" },
+        {
+            "samiulsami/go-deep.nvim",
+            opts = {
+                min_keyword_length = 2,
+                max_items = 5,
+                max_from_same_package = 4,
+                exclude_imported_packages = true,
+            },
+            build = ':lua require("go_deep").build()',
+        },
     },
     opts = {
         sources = {
@@ -165,55 +133,61 @@ require("blink.cmp").setup({
 
 ```lua
 vim.g.go_deep = {
+    -- Enable/disable notifications.
     notifications = true,
+
+    -- Build and use the persisted stdlib index (Takes at most ~1MB).
     index = true,
+
+    -- Path to the persisted stdlib index file.
     index_file_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
+
+    -- Timeout in seconds for gopls workspace/symbol.
     workspace_timeout = 15,
+
+    -- Include workspace symbols from gopls.
     workspace_symbols = true,
+
+    -- Minimum prefix length before completions trigger.
     min_keyword_length = 3,
+
+    -- Maximum completion items returned.
     max_items = 30,
+
+    -- Maximum items from the same package per request.
     max_from_same_package = 4,
+
+    -- Exclude packages already imported in the current file.
     exclude_imported_packages = true,
+
+    -- Exclude symbols from vendor/ packages.
     exclude_vendored_packages = false,
+
+    -- Exclude inaccessible internal packages.
     exclude_internal_packages = true,
+
+    -- Exclude symbols from *_test.go files.
     exclude_test_files = true,
+
+    -- Cache workspace/symbol results in memory.
     completion_cache = true,
 }
 ```
 
-The plugin is Go-only and requires an attached `gopls` client. It does not use
-filetype-based routing.
-
-`providers.go_deep.opts` is merged over `vim.g.go_deep` for that request.
-These overrides affect only request-local keys:
-
-- `min_keyword_length`
-- `max_items`
-- `max_from_same_package`
-- `workspace_symbols`
-- `exclude_imported_packages`
-- `exclude_vendored_packages`
-- `exclude_internal_packages`
-- `exclude_test_files`
-
-Everything else stays global-only in `vim.g.go_deep`:
-
-- `notifications` (Lua-side only)
-- `index`, `index_file_path` (backend startup)
-- `workspace_timeout` (backend startup)
-- `completion_cache` (backend startup)
+***The plugin is Go-only and requires an attached `gopls` client. It does not support/use filetype-based activation.***
 
 ## blink.cmp
+
 
 Use `go_deep.blink` as the provider shown in the setup example above.
 
 Behavior:
-
+- `providers.go_deep.opts` is merged over `vim.g.go_deep` for each request.
 - enabled only when `gopls` is attached to the current buffer
 - always treated as incomplete so blink can refetch
 - accepting an item inserts the missing import
 
-Do not also call `attach_to_buffer()` for blink-managed buffers.
+⚠️ Do not also call `attach_to_buffer()` for blink-managed buffers.
 
 ## Native completion
 
@@ -232,7 +206,6 @@ functions, variables, constants, and structs.
 
 ## TODO
 
-- [ ] Add more tests
 - [ ] Archive after [this issue](https://github.com/golang/go/issues/38528) is properly addressed.
 
 ## Help

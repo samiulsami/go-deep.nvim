@@ -52,10 +52,6 @@ The plugin does not use `go install`, `GOPATH`, or `PATH` for its backend.
 ==============================================================================
 SETUP                                                       *go_deep-setup*
 vim.pack + native completion: >
-    vim.pack.add({
-        { src = "https://github.com/samiulsami/go-deep.nvim" },
-    })
-
     vim.g.go_deep = {
         notifications = true,
         min_keyword_length = 3,
@@ -63,6 +59,22 @@ vim.pack + native completion: >
         max_from_same_package = 4,
         exclude_imported_packages = true,
     }
+
+    vim.api.nvim_create_autocmd("PackChanged", {
+        callback = function(ev)
+            if ev.data.spec.name ~= "go-deep.nvim" or (ev.data.kind ~= "install" and ev.data.kind ~= "update") then
+                return
+            end
+            if not ev.data.active then
+                vim.cmd.packadd("go-deep.nvim")
+            end
+            require("go_deep").build(ev.data.path)
+        end,
+    })
+
+    vim.pack.add({
+        { src = "https://github.com/samiulsami/go-deep.nvim" },
+    })
 
     vim.api.nvim_create_autocmd("LspAttach", {
         callback = function(ev)
@@ -79,6 +91,25 @@ vim.pack + native completion: >
 <
 
 vim.pack + blink.cmp: >
+    vim.g.go_deep = {
+        min_keyword_length = 2,
+        max_items = 5,
+        max_from_same_package = 4,
+        exclude_imported_packages = true,
+    }
+
+    vim.api.nvim_create_autocmd("PackChanged", {
+        callback = function(ev)
+            if ev.data.spec.name ~= "go-deep.nvim" or (ev.data.kind ~= "install" and ev.data.kind ~= "update") then
+                return
+            end
+            if not ev.data.active then
+                vim.cmd.packadd("go-deep.nvim")
+            end
+            require("go_deep").build(ev.data.path)
+        end,
+    })
+
     vim.pack.add({
         { src = "https://github.com/saghen/blink.cmp" },
         { src = "https://github.com/saghen/blink.lib" },
@@ -113,6 +144,7 @@ lazy.nvim + native completion: >
             max_from_same_package = 4,
             exclude_imported_packages = true,
         },
+        build = ':lua require("go_deep").build()',
         config = function(_, opts)
             vim.g.go_deep = opts
             vim.api.nvim_create_autocmd("LspAttach", {
@@ -133,7 +165,16 @@ lazy.nvim + blink.cmp: >
         branch = "main",
         dependencies = {
             { "saghen/blink.lib" },
-            { "samiulsami/go-deep.nvim" },
+            {
+                "samiulsami/go-deep.nvim",
+                opts = {
+                    min_keyword_length = 2,
+                    max_items = 5,
+                    max_from_same_package = 4,
+                    exclude_imported_packages = true,
+                },
+                build = ':lua require("go_deep").build()',
+            },
         },
         opts = {
             sources = {

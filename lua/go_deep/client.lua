@@ -37,6 +37,11 @@ local function fail_pending(err)
 	end
 end
 
+function M.reset_pending()
+	state.pending = {}
+	state.next_request_id = 0
+end
+
 ---@return boolean
 function M.is_running()
 	if not state.job_id then

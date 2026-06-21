@@ -198,7 +198,7 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 			}
 			if items := complete.Build(buildReq, seenHashes, stdlibSymbols); len(items) > 0 {
 				log.Printf("[%d] stdlib: %d items", id, len(items))
-				handler.sendSymbols(id, endpoint, req.RequestID, items, !workspaceSymbolsEnabled)
+				handler.sendSymbols(id, endpoint, req.RequestID, items, false)
 			}
 		}
 	}
@@ -217,7 +217,7 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 		if wsSymbols, ok := handler.cache.Lookup(req.Prefix, req.CWD); ok {
 			items := complete.Build(buildReq, seenHashes, wsSymbols)
 			log.Printf("[%d] workspace (cached): %d items", id, len(items))
-			handler.sendSymbols(id, endpoint, req.RequestID, items, true)
+			handler.sendSymbols(id, endpoint, req.RequestID, items, false)
 		}
 	}
 
@@ -230,6 +230,9 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 			log.Printf("[%d] workspace symbols: %v", id, err)
 			handler.sendSymbols(id, endpoint, req.RequestID, nil, true)
 			return
+		}
+		if len(rawWs) > 100 {
+			panic(fmt.Sprintf("gopls returned %d workspace symbols for %q", len(rawWs), req.Prefix))
 		}
 		wsSymbols := make([]*symbol.Symbol, 0, len(rawWs))
 		for _, raw := range rawWs {

@@ -55,4 +55,9 @@ function imports.on_complete_done(bufnr)
 	imports.apply(bufnr, user_data.import_path, user_data.package_alias, true)
 end
 
+---@param bufnr integer
+function imports.clear(bufnr)
+	pending[bufnr] = nil
+end
+
 return imports

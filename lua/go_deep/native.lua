@@ -19,6 +19,10 @@ local state = {
 local augroup = vim.api.nvim_create_augroup("go_deep", { clear = false })
 local native_complete_source = "Fv:lua.go_deep_completefunc"
 
+local function reset_request_state()
+	client.reset_pending()
+end
+
 ---@param bufnr integer
 local function ensure_complete_source(bufnr)
 	vim.api.nvim_buf_call(bufnr, function()
@@ -38,6 +42,12 @@ local function clear(bufnr)
 		state.cancel[bufnr]()
 		state.cancel[bufnr] = nil
 	end
+end
+
+local function wipe(bufnr)
+	clear(bufnr)
+	state.config[bufnr] = nil
+	require("go_deep.imports").clear(bufnr)
 end
 
 ---@param bufnr integer
@@ -205,7 +215,26 @@ function M.attach(bufnr, user_opts)
 		group = augroup,
 		buffer = bufnr,
 		callback = function()
+			reset_request_state()
 			clear(bufnr)
+		end,
+	})
+
+	vim.api.nvim_create_autocmd("InsertEnter", {
+		group = augroup,
+		buffer = bufnr,
+		callback = function()
+			reset_request_state()
+			clear(bufnr)
+		end,
+	})
+
+	vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
+		group = augroup,
+		buffer = bufnr,
+		callback = function()
+			reset_request_state()
+			wipe(bufnr)
 		end,
 	})
 

@@ -76,7 +76,7 @@ function Source:get_completions(ctx, callback)
 		callback(empty_response)
 		return function() end
 	end
-	if not opts.workspace_symbols and not opts.stdlib_symbols then
+	if not opts.workspace_symbols and not opts.index then
 		callback(empty_response)
 		return function() end
 	end

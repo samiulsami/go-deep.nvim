@@ -41,8 +41,9 @@ local function needs_rebuild()
 end
 
 ---@param path string | nil
+---@param opts go_deep.Config | nil
 ---@return boolean
-function M.build(path)
+function M.build(path, opts)
 	path = path or M.plugin_root
 	if not path then
 		vim.notify("[go-deep] could not infer plugin root. pass require('go_deep').build(path)", vim.log.levels.ERROR)
@@ -90,7 +91,29 @@ function M.build(path)
 	else
 		vim.notify("[go-deep] build failed (exit " .. exit_code .. ")\n" .. out, vim.log.levels.ERROR)
 	end
-	return exit_code == 0
+	if exit_code ~= 0 then
+		return false
+	end
+
+	if opts and opts.index == false then
+		return true
+	end
+
+	vim.notify("[go-deep] building stdlib index...", vim.log.levels.INFO)
+	local index_result = vim.system({
+		bin_path,
+		"build-index",
+		"--index-file-path=" .. tostring(opts and opts.index_file_path or ""),
+	}, { cwd = path, text = true }):wait()
+	local index_exit_code = index_result.code
+	local index_out = (index_result.stderr or "") .. (index_result.stdout or "")
+	index_out = index_out:gsub("\n$", "")
+	if index_exit_code == 0 then
+		vim.notify("[go-deep] stdlib index built successfully", vim.log.levels.INFO)
+		return true
+	end
+	vim.notify("[go-deep] stdlib index build failed (exit " .. index_exit_code .. ")\n" .. index_out, vim.log.levels.ERROR)
+	return false
 end
 
 ---@param opts table
@@ -98,7 +121,7 @@ function M.ensure(opts)
 	if client.is_running() then
 		return
 	end
-	if needs_rebuild() and not M.build() then
+	if needs_rebuild() and not M.build(nil, opts) then
 		return
 	end
 

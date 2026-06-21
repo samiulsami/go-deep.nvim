@@ -11,7 +11,6 @@ type ProcessOptions struct {
 	MaxItems           int  `msgpack:"max_items"`
 	MaxFromSamePackage int  `msgpack:"max_from_same_package"`
 	WorkspaceSymbols   bool `msgpack:"workspace_symbols"`
-	StdlibSymbols      bool `msgpack:"stdlib_symbols"`
 	ExcludeImported    bool `msgpack:"exclude_imported"`
 	ExcludeVendored    bool `msgpack:"exclude_vendored"`
 	ExcludeInternal    bool `msgpack:"exclude_internal"`

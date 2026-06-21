@@ -139,7 +139,7 @@ function M.completefunc(findstart, base)
 	if not opts then
 		return { words = {}, refresh = "always" }
 	end
-	if not opts.workspace_symbols and not opts.stdlib_symbols then
+	if not opts.workspace_symbols and not opts.index then
 		return { words = {}, refresh = "always" }
 	end
 	if opts.workspace_symbols and not client.has_gopls(bufnr) then

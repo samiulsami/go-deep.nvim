@@ -10,7 +10,6 @@ local native = require("go_deep.native")
 ---@field max_from_same_package integer maximum items from the same package. default: 4
 ---@field workspace_timeout integer workspace/symbol timeout in seconds. default: 15
 ---@field workspace_symbols boolean include workspace/gopls symbols. default: true
----@field stdlib_symbols boolean include indexed stdlib symbols. default: true
 ---@field exclude_imported_packages boolean exclude imported packages. default: true
 ---@field exclude_vendored_packages boolean exclude vendored packages. default: false
 ---@field exclude_internal_packages boolean exclude inaccessible internal packages. default: true
@@ -30,7 +29,6 @@ M.defaults = {
 	max_from_same_package = 4,
 	workspace_timeout = 15,
 	workspace_symbols = true,
-	stdlib_symbols = true,
 	exclude_imported_packages = true,
 	exclude_vendored_packages = false,
 	exclude_internal_packages = true,
@@ -64,11 +62,17 @@ local function validate_opts(opts, path, allow_notifications)
 			errors[#errors + 1] = path .. ".notifications must be a boolean"
 		end
 	end
-	if opts.index ~= nil and type(opts.index) ~= "boolean" then
-		errors[#errors + 1] = path .. ".index must be a boolean"
+	if opts.index ~= nil then
+		if not allow_notifications then
+			errors[#errors + 1] = path .. ".index is not allowed here"
+		elseif type(opts.index) ~= "boolean" then
+			errors[#errors + 1] = path .. ".index must be a boolean"
+		end
 	end
 	if opts.index_file_path ~= nil then
-		if type(opts.index_file_path) ~= "string" then
+		if not allow_notifications then
+			errors[#errors + 1] = path .. ".index_file_path is not allowed here"
+		elseif type(opts.index_file_path) ~= "string" then
 			errors[#errors + 1] = path .. ".index_file_path must be a string"
 		elseif opts.index_file_path == "" then
 			errors[#errors + 1] = path .. ".index_file_path must not be empty"
@@ -96,7 +100,9 @@ local function validate_opts(opts, path, allow_notifications)
 		end
 	end
 	if opts.workspace_timeout ~= nil then
-		if not is_integer(opts.workspace_timeout) then
+		if not allow_notifications then
+			errors[#errors + 1] = path .. ".workspace_timeout is not allowed here"
+		elseif not is_integer(opts.workspace_timeout) then
 			errors[#errors + 1] = path .. ".workspace_timeout must be an integer"
 		elseif opts.workspace_timeout < 1 then
 			errors[#errors + 1] = path .. ".workspace_timeout must be >= 1"
@@ -104,9 +110,6 @@ local function validate_opts(opts, path, allow_notifications)
 	end
 	if opts.workspace_symbols ~= nil and type(opts.workspace_symbols) ~= "boolean" then
 		errors[#errors + 1] = path .. ".workspace_symbols must be a boolean"
-	end
-	if opts.stdlib_symbols ~= nil and type(opts.stdlib_symbols) ~= "boolean" then
-		errors[#errors + 1] = path .. ".stdlib_symbols must be a boolean"
 	end
 	if opts.exclude_imported_packages ~= nil and type(opts.exclude_imported_packages) ~= "boolean" then
 		errors[#errors + 1] = path .. ".exclude_imported_packages must be a boolean"
@@ -120,8 +123,12 @@ local function validate_opts(opts, path, allow_notifications)
 	if opts.exclude_test_files ~= nil and type(opts.exclude_test_files) ~= "boolean" then
 		errors[#errors + 1] = path .. ".exclude_test_files must be a boolean"
 	end
-	if opts.completion_cache ~= nil and type(opts.completion_cache) ~= "boolean" then
-		errors[#errors + 1] = path .. ".completion_cache must be a boolean"
+	if opts.completion_cache ~= nil then
+		if not allow_notifications then
+			errors[#errors + 1] = path .. ".completion_cache is not allowed here"
+		elseif type(opts.completion_cache) ~= "boolean" then
+			errors[#errors + 1] = path .. ".completion_cache must be a boolean"
+		end
 	end
 
 	if #errors > 0 then
@@ -152,7 +159,7 @@ end
 ---@param path string | nil
 ---@return boolean
 function M.build(path)
-	return backend.build(path)
+	return backend.build(path, M.resolve_config())
 end
 
 ---@param bufnr integer

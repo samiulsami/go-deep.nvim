@@ -66,7 +66,7 @@ type Index struct {
 	mu       sync.RWMutex
 }
 
-func NewIndex(ctx context.Context, cfg IndexConfig) (*Index, error) {
+func New(ctx context.Context, cfg IndexConfig) (*Index, error) {
 	idx := &Index{cfg: cfg}
 	if !cfg.Enabled || cfg.Path == "" {
 		return idx, nil
@@ -108,6 +108,30 @@ func NewIndex(ctx context.Context, cfg IndexConfig) (*Index, error) {
 	return idx, nil
 }
 
+func BuildAndSave(ctx context.Context, path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	startedAt := time.Now()
+	cache, err := buildCache(ctx)
+	if err != nil {
+		return err
+	}
+	if err := saveCache(path, cache); err != nil {
+		return err
+	}
+	log.Printf("index: stdlib index ready (%d symbols, %s)", len(cache.Symbols), time.Since(startedAt).Round(time.Millisecond))
+	return nil
+}
+
+func DefaultCachePath() (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("user cache dir: %w", err)
+	}
+	return cacheDir + "/go_deep/go_deep.gob", nil
+}
+
 func (idx *Index) Symbols() []*symbol.Symbol {
 	if !idx.ready.Load() {
 		return nil
@@ -138,7 +162,7 @@ func (idx *Index) startBuild(ctx context.Context, reason string, rebuilding bool
 	go func() {
 		defer idx.building.Store(false)
 		startedAt := time.Now()
-		cache, err := idx.build(ctx)
+		cache, err := buildCache(ctx)
 		if err != nil {
 			log.Printf("index: %s stdlib index failed after %s: %v", action, time.Since(startedAt).Round(time.Millisecond), err)
 			return
@@ -152,7 +176,7 @@ func (idx *Index) startBuild(ctx context.Context, reason string, rebuilding bool
 	}()
 }
 
-func (idx *Index) build(ctx context.Context) (CacheFile, error) {
+func buildCache(ctx context.Context) (CacheFile, error) {
 	fingerprint, err := stdlibFingerprint(ctx)
 	if err != nil {
 		return CacheFile{}, err

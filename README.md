@@ -37,6 +37,9 @@ archive already contains `bin/go-deep`.
 :lua require("go_deep").build()
 ```
 
+That builds `bin/go-deep` and, when `vim.g.go_deep.index ~= false`, prebuilds
+the persisted stdlib index too.
+
 The plugin does not use `go install`, `GOPATH`, or `PATH` for its backend.
 The binary always lives at `bin/go-deep` under the plugin root.
 
@@ -167,7 +170,6 @@ vim.g.go_deep = {
     index_file_path = vim.fn.stdpath("data") .. "/go_deep/go_deep.gob",
     workspace_timeout = 15,
     workspace_symbols = true,
-    stdlib_symbols = true,
     min_keyword_length = 3,
     max_items = 30,
     max_from_same_package = 4,
@@ -189,7 +191,6 @@ These overrides affect only request-local keys:
 - `max_items`
 - `max_from_same_package`
 - `workspace_symbols`
-- `stdlib_symbols`
 - `exclude_imported_packages`
 - `exclude_vendored_packages`
 - `exclude_internal_packages`

@@ -46,6 +46,8 @@ The binary always lives at `bin/go-deep` under the plugin root.
 ## Setup
 #### vim.pack + native completion
 
+***NOTE: setting `vim.opt.autocomplete = true` may flood the screen with completion suggestions unless `go_deep.max_items` is reduced.***
+
 ```lua
 vim.g.go_deep = {
     notifications = true,

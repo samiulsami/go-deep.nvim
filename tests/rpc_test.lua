@@ -36,7 +36,7 @@ local ok, err = pcall(function()
 		"package main",
 		"",
 		"import (",
-		"\t\"fmt\"",
+		'\t"fmt"',
 		")",
 		"",
 		"func main() {",
@@ -62,7 +62,9 @@ local ok, err = pcall(function()
 
 	-- Test 4: no supported LSP -> false
 	local stub_clients = vim.lsp.get_clients
-	vim.lsp.get_clients = function() return {} end
+	vim.lsp.get_clients = function()
+		return {}
+	end
 	check("has_gopls returns false with no supported LSP", client.has_gopls(bufnr) == false)
 	vim.lsp.get_clients = stub_clients
 
@@ -122,6 +124,32 @@ local ok, err = pcall(function()
 	-- Test 10: _dispatch ignores replies with non-numeric request_id
 	client_mod._dispatch({ request_id = "not_a_number", items = {} })
 	check("_dispatch ignores non-numeric request_id", true)
+
+	-- Test 11: empty import e2e
+	vim.api.nvim_buf_set_lines(0, 0, -1, false, { "package main", "", "func main() {", "}" })
+	vim.bo.filetype = "go"
+	require("go_deep").attach_to_buffer(0) -- reuse the suite's backend (needs gopls on PATH, as CI provides)
+
+	local cfg = require("go_deep").resolve_config()
+	local words, exited = {}, false
+	require("go_deep.client").complete(0, "Builder", cfg, {
+		on_items = function(reply)
+			for _, it in ipairs(reply.items or {}) do
+				words[it.word] = true
+			end
+		end,
+		on_error = function(e)
+			if tostring(e):match("backend exited") then
+				exited = true
+			end
+		end,
+	})
+	vim.wait(20000, function()
+		return exited or words["strings.Builder"]
+	end, 100)
+
+	check("backend survives completion in a no-import buffer", not exited)
+	check("bare 'Builder' -> strings.Builder (no-import buffer)", words["strings.Builder"] == true)
 
 	print(string.format("\n%d/%d tests passed", passed, total))
 end)

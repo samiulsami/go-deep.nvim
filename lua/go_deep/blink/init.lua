@@ -1,6 +1,7 @@
 local client = require("go_deep.client")
 local backend = require("go_deep.backend")
 local imports = require("go_deep.imports")
+local treesitter = require("go_deep.treesitter")
 local utils = require("go_deep.utils")
 local go_deep = require("go_deep")
 
@@ -84,18 +85,24 @@ function Source:get_completions(ctx, callback)
 		callback(empty_response)
 		return function() end
 	end
+
+	local prefix = extract_prefix(ctx)
+	if not prefix or not utils.is_valid_query(prefix, opts.min_keyword_length) then
+		callback(empty_response)
+		return function() end
+	end
+	local row = ctx.cursor[1] - 1
+	local col = (ctx.bounds.start_col - 1) + ctx.bounds.length
+	if treesitter.is_denied_completion_context(ctx.bufnr, row, col) then
+		callback(empty_response)
+		return function() end
+	end
 	if not client.is_running() then
 		backend.ensure(go_deep.resolve_config())
 		if not client.is_running() then
 			callback(empty_response)
 			return function() end
 		end
-	end
-
-	local prefix = extract_prefix(ctx)
-	if not prefix or not utils.is_valid_query(prefix, opts.min_keyword_length) then
-		callback(empty_response)
-		return function() end
 	end
 
 	local ok, cancel = client.complete(ctx.bufnr, prefix, opts, {

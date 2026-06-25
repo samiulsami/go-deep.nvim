@@ -14,6 +14,13 @@ function utils.is_valid_query(prefix, min_length)
 	return #prefix >= min_length and utils.valid_prefix(prefix)
 end
 
+---@param line string
+---@param col integer 0-indexed cursor column
+---@return boolean
+function utils.is_after_dot(line, col)
+	return line:sub(1, col):match("%.%s*$") ~= nil
+end
+
 ---@return string
 ---@return integer
 function utils.cursor_prefix()

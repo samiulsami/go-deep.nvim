@@ -18,6 +18,41 @@ local function check(name, ok)
 	end
 end
 
+local function set_go_buffer(lines)
+	vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+	vim.bo.filetype = "go"
+	local ok, parser = pcall(vim.treesitter.get_parser, 0, "go")
+	if ok and parser then
+		pcall(parser.parse, parser)
+	end
+	vim.wait(50)
+end
+
+local function marker_position(lines)
+	for i, line in ipairs(lines) do
+		local col = line:find("|", 1, true)
+		if col then
+			lines[i] = line:sub(1, col - 1) .. line:sub(col + 1)
+			return i - 1, col - 1, lines
+		end
+	end
+	error("missing marker")
+end
+
+local function denied_context(lines)
+	local row, col, cleaned = marker_position(vim.deepcopy(lines))
+	set_go_buffer(cleaned)
+	return require("go_deep.treesitter").is_denied_completion_context(0, row, col)
+end
+
+local function check_denied(name, lines)
+	check(name, denied_context(lines) == true)
+end
+
+local function check_allowed(name, lines)
+	check(name, denied_context(lines) == false)
+end
+
 local ok, err = pcall(function()
 	print("Starting RPC test...")
 
@@ -32,7 +67,7 @@ local ok, err = pcall(function()
 	end
 
 	-- Write a Go buffer so tree-sitter and prefix extraction work.
-	vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+	set_go_buffer({
 		"package main",
 		"",
 		"import (",
@@ -43,7 +78,6 @@ local ok, err = pcall(function()
 		"\ttestSomething",
 		"}",
 	})
-	vim.bo.filetype = "go"
 	vim.api.nvim_win_set_cursor(0, { 8, 5 })
 
 	require("go_deep").attach_to_buffer(0)
@@ -125,9 +159,33 @@ local ok, err = pcall(function()
 	client_mod._dispatch({ request_id = "not_a_number", items = {} })
 	check("_dispatch ignores non-numeric request_id", true)
 
-	-- Test 11: empty import e2e
-	vim.api.nvim_buf_set_lines(0, 0, -1, false, { "package main", "", "func main() {", "}" })
-	vim.bo.filetype = "go"
+	-- Test 11: completion context denylist
+	check_denied("deny in block comment", { "/* he|llo */", "package main" })
+	check_denied("deny in multiline block comment", { "/* hello", "he|llo", "*/", "package main" })
+	check_denied("deny in line comment", { "package main", "", "// he|llo" })
+	check_denied("deny in package clause", { "package ma|in" })
+	check_denied("deny in interpreted string", { "package main", "", "func main() {", '\t_ = "he|llo"', "}" })
+	check_denied("deny in raw string", { "package main", "", "func main() {", "\t_ = `he|llo`", "}" })
+	check_denied("deny in rune literal", { "package main", "", "func main() {", "\t_ = 'h|'", "}" })
+	check_denied("deny in single import path", { "package main", "", 'import "f|mt"' })
+	check_denied("deny in grouped import path", { "package main", "", "import (", '\t"f|mt"', ")" })
+	check_denied("deny in import alias", { "package main", "", 'import fm|t "fmt"' })
+	check_denied("deny in blank import alias", { "package main", "", 'import _| "fmt"' })
+	check_denied("deny in dot import alias", { "package main", "", 'import .| "fmt"' })
+	check_denied("deny on blank import-block line", { "package main", "", "import (", "\t|", '\t"fmt"', ")" })
+	check_denied("deny on import block close", { "package main", "", "import (", '\t"fmt"', "|)" })
+	check_denied("deny after selector dot", { "package main", "", "func main() {", "\trand.|", "}" })
+	check_denied("deny after selector dot with spaces", { "package main", "", "func main() {", "\trand.  |", "}" })
+	check_denied("deny in selector field", { "package main", "", "func main() {", "\trand.Ne|w", "}" })
+	check_denied("deny in selector operand", { "package main", "", "func main() {", "\tra|nd.New()", "}" })
+	check_allowed("allow plain identifier context", { "package main", "", "func main() {", "\tCha|", "}" })
+	check_allowed("allow assignment rhs identifier", { "package main", "", "func main() {", "\t_ = Cha|", "}" })
+	check_allowed("allow call argument identifier", { "package main", "", "func main() {", "\tf(Cha|)", "}" })
+	check_allowed("allow return identifier", { "package main", "", "func f() any {", "\treturn Cha|", "}" })
+	check_allowed("allow type position identifier", { "package main", "", "var _ Cha|" })
+
+	-- Test 12: empty import e2e
+	set_go_buffer({ "package main", "", "func main() {", "}" })
 	require("go_deep").attach_to_buffer(0) -- reuse the suite's backend (needs gopls on PATH, as CI provides)
 
 	local cfg = require("go_deep").resolve_config()

@@ -1,4 +1,4 @@
-.PHONY: build install test-go test-lua test lint fmt ci ci-go ci-nvim clean release help
+.PHONY: build install test-go test-lua test lint fmt-go fmt-lua fmt ci ci-go ci-nvim clean release help
 
 GO_DIR   := go
 BIN_DIR  := bin
@@ -19,7 +19,9 @@ help:
 	@echo "  test-lua    Run Lua tests using Neovim."
 	@echo "  test        Run all tests (Go and Lua)."
 	@echo "  lint        Run linters on the Go code."
-	@echo "  fmt         Format the Go code using golangci-lint."
+	@echo "  fmt-go      Format the Go code using golangci-lint."
+	@echo "  fmt-lua     Format Lua code using stylua."
+	@echo "  fmt         Format Go and Lua code."
 	@echo "  ci          Run all checks (lint, test, build) for CI."
 	@echo "  ci-go       Run Go checks (lint, test, build) for CI."
 	@echo "  ci-nvim     Run Neovim tests for CI."
@@ -53,11 +55,20 @@ lint:
 	fi
 	cd $(GO_DIR) && "$(GOLANGCI_LINT)" run --config $(GOLANGCI_LINT_CONFIG) ./...
 
-fmt:
+fmt-go:
 	@if ! command -v "$(GOLANGCI_LINT)" >/dev/null 2>&1; then \
 		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 	fi
 	cd $(GO_DIR) && "$(GOLANGCI_LINT)" fmt --config $(GOLANGCI_LINT_CONFIG) ./...
+
+fmt-lua:
+	@if ! command -v stylua >/dev/null 2>&1; then \
+		echo "stylua is required for fmt-lua"; \
+		exit 1; \
+	fi
+	stylua lua tests
+
+fmt: fmt-go fmt-lua
 
 ci-go: lint test-go build
 

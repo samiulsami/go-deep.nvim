@@ -9,10 +9,8 @@ local M = {}
 local module_path = debug.getinfo(1, "S").source:sub(2)
 local backend_build_version = "v0.0.16"
 
-M.plugin_root = vim.fn.fnamemodify(
-	vim.api.nvim_get_runtime_file("lua/go_deep/init.lua", false)[1] or module_path,
-	":p:h:h:h"
-)
+M.plugin_root =
+	vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("lua/go_deep/init.lua", false)[1] or module_path, ":p:h:h:h")
 M.built_binary = M.plugin_root and vim.fs.joinpath(M.plugin_root, "bin", "go-deep")
 M.built_version_file = M.plugin_root and vim.fs.joinpath(M.plugin_root, "bin", "go-deep.version")
 
@@ -60,10 +58,7 @@ function M.build(path, opts)
 	major = tonumber(major)
 	minor = tonumber(minor)
 	if not major or not minor or major < 1 or (major == 1 and minor < 25) then
-		vim.notify(
-			"[go-deep] Go 1.25+ is required to build from source; found " .. go_version,
-			vim.log.levels.ERROR
-		)
+		vim.notify("[go-deep] Go 1.25+ is required to build from source; found " .. go_version, vim.log.levels.ERROR)
 		return false
 	end
 
@@ -112,7 +107,10 @@ function M.build(path, opts)
 		vim.notify("[go-deep] stdlib index built successfully", vim.log.levels.INFO)
 		return true
 	end
-	vim.notify("[go-deep] stdlib index build failed (exit " .. index_exit_code .. ")\n" .. index_out, vim.log.levels.ERROR)
+	vim.notify(
+		"[go-deep] stdlib index build failed (exit " .. index_exit_code .. ")\n" .. index_out,
+		vim.log.levels.ERROR
+	)
 	return false
 end
 

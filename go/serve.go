@@ -211,8 +211,6 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 		return
 	}
 
-	cacheKey := req.Prefix + "\x00" + req.CWD
-
 	if handler.cache != nil {
 		if wsSymbols, ok := handler.cache.Lookup(req.Prefix, req.CWD); ok {
 			items := complete.Build(buildReq, seenHashes, wsSymbols)
@@ -241,7 +239,7 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 			}
 		}
 		if handler.cache != nil {
-			handler.cache.Put(cacheKey, wsSymbols)
+			handler.cache.Put(req.Prefix, req.CWD, wsSymbols)
 		}
 		items := complete.Build(buildReq, seenHashes, wsSymbols)
 		log.Printf("[%d] workspace: %d items", id, len(items))

@@ -176,6 +176,10 @@ end
 function M.complete(bufnr, prefix, opts, handlers)
 	local imported_paths = treesitter.get_imported_paths(bufnr)
 
+	if next(imported_paths) == nil then
+		imported_paths = vim.empty_dict()
+	end
+
 	local req = {
 		prefix = prefix,
 		filepath = vim.api.nvim_buf_get_name(bufnr),

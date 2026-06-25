@@ -8,6 +8,7 @@ BIN_PATH := $(BIN_DIR)/$(BINARY)
 GOLANGCI_LINT_VERSION ?= v2.5.0
 GO_BIN := $(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
 GOLANGCI_LINT := $(GO_BIN)/golangci-lint
+GOLANGCI_LINT_CONFIG := ../.golangci.yml
 
 help:
 	@echo "Usage: make [target]"
@@ -24,7 +25,7 @@ help:
 	@echo "  ci-nvim     Run Neovim tests for CI."
 	@echo "  release     Build the release artifact."
 	@echo "  clean       Remove built binaries and temporary files."
-	
+
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -50,13 +51,13 @@ lint:
 	@if ! command -v "$(GOLANGCI_LINT)" >/dev/null 2>&1; then \
 		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 	fi
-	cd $(GO_DIR) && "$(GOLANGCI_LINT)" run ./...
+	cd $(GO_DIR) && "$(GOLANGCI_LINT)" run --config $(GOLANGCI_LINT_CONFIG) ./...
 
 fmt:
 	@if ! command -v "$(GOLANGCI_LINT)" >/dev/null 2>&1; then \
 		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 	fi
-	cd $(GO_DIR) && "$(GOLANGCI_LINT)" fmt ./...
+	cd $(GO_DIR) && "$(GOLANGCI_LINT)" fmt --config $(GOLANGCI_LINT_CONFIG) ./...
 
 ci-go: lint test-go build
 

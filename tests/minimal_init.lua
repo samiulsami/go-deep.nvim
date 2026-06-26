@@ -15,4 +15,19 @@ local function clone_plugin(repo, name)
 end
 
 clone_plugin("nvim-treesitter/nvim-treesitter", "nvim-treesitter")
-require("nvim-treesitter.install").install({ "go" }):wait()
+
+local site_dir = vim.fn.stdpath("data") .. "/site"
+vim.opt.runtimepath:prepend(site_dir)
+
+require("nvim-treesitter").install({ "go" }):wait()
+vim.opt.runtimepath:prepend(site_dir)
+assert(pcall(vim.treesitter.language.add, "go"))
+
+-- Mirror the real-world setup: start treesitter whenever a filetype is set.
+-- Without this, setting vim.bo.filetype in tests does not attach a parser,
+-- so get_parser returns nil even when the language is installed.
+vim.api.nvim_create_autocmd("FileType", {
+	callback = function(args)
+		pcall(vim.treesitter.start, args.buf)
+	end,
+})

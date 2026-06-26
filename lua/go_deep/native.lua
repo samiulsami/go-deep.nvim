@@ -1,4 +1,5 @@
 local client = require("go_deep.client")
+local treesitter = require("go_deep.treesitter")
 local utils = require("go_deep.utils")
 
 local M = {}
@@ -48,6 +49,13 @@ local function wipe(bufnr)
 	clear(bufnr)
 	state.config[bufnr] = nil
 	require("go_deep.imports").clear(bufnr)
+end
+
+---@param bufnr integer
+---@return boolean
+local function is_denied_context(bufnr)
+	local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+	return treesitter.is_denied_completion_context(bufnr, row - 1, col)
 end
 
 ---@param bufnr integer
@@ -169,6 +177,10 @@ function M.completefunc(findstart, base)
 		return { words = {}, refresh = "always" }
 	end
 
+	if is_denied_context(bufnr) then
+		return { words = {}, refresh = "always" }
+	end
+
 	if client.is_running() then
 		complete(bufnr, base, start_col, opts)
 		return -2
@@ -251,6 +263,9 @@ function M.attach(bufnr, user_opts)
 			return
 		end
 		if start_col < 0 then
+			return
+		end
+		if is_denied_context(bufnr) then
 			return
 		end
 

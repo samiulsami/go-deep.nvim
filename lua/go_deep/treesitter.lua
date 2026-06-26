@@ -1,5 +1,18 @@
 ---@class go_deep.treesitter
 local treesitter = {}
+local utils = require("go_deep.utils")
+
+local denied_completion_contexts = {
+	comment = true,
+	interpreted_string_literal = true,
+	raw_string_literal = true,
+	rune_literal = true,
+	package_clause = true,
+	import_declaration = true,
+	import_spec_list = true,
+	import_spec = true,
+	selector_expression = true,
+}
 
 ---@param bufnr integer
 ---@return TSNode | nil
@@ -22,6 +35,43 @@ local function get_root_node(bufnr)
 		return parsed[1]:root()
 	end
 	return nil
+end
+
+---@param bufnr integer
+---@param row integer 0-indexed
+---@param col integer 0-indexed
+---@return boolean
+function treesitter.is_denied_completion_context(bufnr, row, col)
+	if bufnr == nil or row == nil or col == nil then
+		return false
+	end
+
+	local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
+	if utils.is_after_dot(line, col) then
+		return true
+	end
+
+	local ts_col = col
+	if ts_col > 0 then
+		ts_col = ts_col - 1
+	end
+
+	local ok, node = pcall(vim.treesitter.get_node, {
+		bufnr = bufnr,
+		pos = { row, ts_col },
+	})
+	if not ok or node == nil then
+		return false
+	end
+
+	while node do
+		if denied_completion_contexts[node:type()] then
+			return true
+		end
+		node = node:parent()
+	end
+
+	return false
 end
 
 ---@param bufnr integer

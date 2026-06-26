@@ -55,7 +55,7 @@ jobs:
         run: go install golang.org/x/tools/gopls@v0.22.0
 
       - name: Install tree-sitter CLI
-        run: npm install -g tree-sitter-cli@0.26.8
+        run: npm install -g tree-sitter-cli
 
       - name: Run checks
         run: make ci-nvim

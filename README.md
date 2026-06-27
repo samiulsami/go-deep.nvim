@@ -1,6 +1,8 @@
 # go-deep.nvim
 
-A Go ```deep-completion``` source for Neovim native `completeFunc` and [blink.cmp](https://github.com/Saghen/blink.cmp), that works alongside the LSP source(s) and provides completion suggestions for <b> "the standard library, local, and vendored packages".</b>
+A Go `deep-completion` source for Neovim native `completeFunc` and [blink.cmp](https://github.com/Saghen/blink.cmp) that suggests symbols from <b>unimported standard-library, local, and vendored packages</b>, then inserts the missing import on accept.
+
+_Successor to [`cmp-go-deep`](https://github.com/samiulsami/cmp-go-deep), rewritten with a plugin-local Go backend._
 
 #### Why?
 

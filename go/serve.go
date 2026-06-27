@@ -15,7 +15,6 @@ import (
 	"github.com/samiulsami/go-deep.nvim/go/complete"
 	"github.com/samiulsami/go-deep.nvim/go/gopls"
 	"github.com/samiulsami/go-deep.nvim/go/index"
-	"github.com/samiulsami/go-deep.nvim/go/pool"
 	"github.com/samiulsami/go-deep.nvim/go/symbol"
 )
 
@@ -46,8 +45,42 @@ type serveHandler struct {
 	options      complete.ProcessOptions
 	reqID        atomic.Uint64
 	cache        *symCache
-	fetchPool    *pool.Pool
+	fetchPool    *fetchPool
 	stdlibIndex  *index.Index
+}
+
+type fetchPool struct {
+	ctx  context.Context
+	jobs chan func()
+}
+
+func newFetchPool(ctx context.Context, workers int) *fetchPool {
+	if workers < 1 {
+		workers = 1
+	}
+	p := &fetchPool{ctx: ctx, jobs: make(chan func(), min(50, workers*2))}
+	for range workers {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case fn := <-p.jobs:
+					fn()
+				}
+			}
+		}()
+	}
+	return p
+}
+
+func (p *fetchPool) Submit(fn func()) {
+	select {
+	case <-p.ctx.Done():
+		return
+	case p.jobs <- fn:
+		return
+	}
 }
 
 func defaultServeConfig() serveConfig {
@@ -90,12 +123,7 @@ func runServe(ctx context.Context, stdout io.WriteCloser, args []string) error {
 	setupSessionLog()
 
 	workers := runtime.GOMAXPROCS(0)
-	fetchPool := pool.New(ctx, workers)
-
-	log.Printf("serve: index=%v indexDBPath=%q maxItems=%d maxFromSamePackage=%d workspaceTimeout=%ds workspaceSymbols=%v workers=%d excludeImported=%v excludeVendored=%v excludeInternal=%v excludeTestFiles=%v",
-		cfg.Index, cfg.IndexFilePath,
-		cfg.MaxItems, cfg.MaxFromSamePackage, cfg.WorkspaceTimeout, cfg.WorkspaceSymbols, workers,
-		cfg.ExcludeImported, cfg.ExcludeVendored, cfg.ExcludeInternal, cfg.ExcludeTestFiles)
+	fetchPool := newFetchPool(ctx, workers)
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -165,14 +193,12 @@ func (handler *serveHandler) serve(endpoint *rpc.Endpoint) error {
 	}, endpoint); err != nil {
 		return err
 	}
-	log.Printf("rpc server ready, awaiting requests")
+	log.Printf("serve: ready")
 	return endpoint.Serve()
 }
 
 func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.Request) {
 	id := handler.reqID.Add(1)
-	log.Printf("[%d] symbols: prefix=%q file=%s cwd=%s",
-		id, req.Prefix, req.Filepath, req.CWD)
 
 	effectiveOpts := handler.options
 	if req.Options != nil {
@@ -197,7 +223,6 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 				seenHashes = make(map[string]struct{})
 			}
 			if items := complete.Build(buildReq, seenHashes, stdlibSymbols); len(items) > 0 {
-				log.Printf("[%d] stdlib: %d items", id, len(items))
 				handler.sendSymbols(id, endpoint, req.RequestID, items, false)
 			}
 		}
@@ -214,7 +239,6 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 	if handler.cache != nil {
 		if wsSymbols, ok := handler.cache.Lookup(req.Prefix, req.CWD); ok {
 			items := complete.Build(buildReq, seenHashes, wsSymbols)
-			log.Printf("[%d] workspace (cached): %d items", id, len(items))
 			handler.sendSymbols(id, endpoint, req.RequestID, items, false)
 		}
 	}
@@ -230,7 +254,7 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 			return
 		}
 		if len(rawWs) > 100 {
-			panic(fmt.Sprintf("gopls returned %d workspace symbols for %q", len(rawWs), req.Prefix))
+			log.Printf("[%d] gopls returned %d workspace symbols for %q", id, len(rawWs), req.Prefix)
 		}
 		wsSymbols := make([]*symbol.Symbol, 0, len(rawWs))
 		for _, raw := range rawWs {
@@ -242,7 +266,6 @@ func (handler *serveHandler) handleSymbols(endpoint *rpc.Endpoint, req complete.
 			handler.cache.Put(req.Prefix, req.CWD, wsSymbols)
 		}
 		items := complete.Build(buildReq, seenHashes, wsSymbols)
-		log.Printf("[%d] workspace: %d items", id, len(items))
 		handler.sendSymbols(id, endpoint, req.RequestID, items, true)
 	})
 }
